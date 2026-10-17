@@ -1,0 +1,147 @@
+import json
+
+import httpx
+import pytest
+import respx
+from mcp.shared.memory import create_connected_server_and_client_session
+from PIL import Image
+
+from label_image_mcp import server
+from label_image_mcp.client import ApiError, LabelImageClient
+from label_image_mcp.exporters import export_coco, export_yolo
+
+API = "https://api.test/api"
+
+IMAGE = {
+    "imageId": "img-1",
+    "filename": "cells.png",
+    "width": 200,
+    "height": 100,
+    "category": "Histopathology",
+    "annotations": [
+        {"id": "a1", "type": "pin", "label": "nucleus", "x": 5, "y": 5, "color": "#f00", "createdAt": "t"},
+        {
+            "id": "a2", "type": "polygon", "label": "tumor", "x": 10, "y": 20, "width": 40, "height": 30,
+            "points": [{"x": 10, "y": 20}, {"x": 50, "y": 20}, {"x": 50, "y": 50}, {"x": 10, "y": 50}],
+            "color": "#0f0", "createdAt": "t", "confidence": "high",
+        },
+        {"id": "a3", "type": "circle", "label": "cell", "x": 100, "y": 50, "radius": 10, "color": "#00f", "createdAt": "t"},
+    ],
+}
+
+
+def ok(data):
+    return httpx.Response(200, json={"success": True, "data": data})
+
+
+@pytest.fixture
+def api(monkeypatch):
+    monkeypatch.setenv("LABEL_API_URL", API)
+    monkeypatch.setenv("LABEL_USERNAME", "alice")
+    monkeypatch.setenv("LABEL_PASSWORD", "secret")
+    with respx.mock(assert_all_called=False) as mock:
+        mock.post(f"{API}/admin/login").mock(return_value=ok({"token": "tok", "username": "alice", "expiresIn": 3600}))
+        mock.get(f"{API}/images").mock(return_value=ok([IMAGE, {**IMAGE, "imageId": "img-2", "category": "Other"}]))
+        mock.get(f"{API}/images/img-1").mock(return_value=ok(IMAGE))
+        yield mock
+
+
+async def call_raw(name, args):
+    async with create_connected_server_and_client_session(server.mcp._mcp_server) as session:
+        return await session.call_tool(name, args)
+
+
+async def call(name, args):
+    result = await call_raw(name, args)
+    assert not result.isError, result.content
+    data = result.structuredContent
+    # Non-object return values are wrapped as {"result": ...}
+    return data["result"] if set(data) == {"result"} else data
+
+
+async def test_list_images_filters_by_category(api):
+    images = await call("list_images", {"category": "histopathology"})
+    assert [i["imageId"] for i in images] == ["img-1"]
+    assert images[0]["annotationCount"] == 3
+
+
+async def test_requests_send_bearer_token(api):
+    await call("get_image", {"image_id": "img-1"})
+    assert api.routes[0].call_count == 1  # logged in once
+    assert api.calls.last.request.headers["Authorization"] == "Bearer tok"
+
+
+async def test_add_annotations_appends_and_computes_polygon_bbox(api):
+    save = api.put(f"{API}/images/img-1/annotations").mock(return_value=ok({"imageId": "img-1", "annotationCount": 4}))
+    result = await call("add_annotations", {
+        "image_id": "img-1",
+        "annotations": [{"type": "polygon", "label": "stroma",
+                         "points": [{"x": 1, "y": 2}, {"x": 9, "y": 2}, {"x": 5, "y": 12}]}],
+    })
+    sent = json.loads(save.calls.last.request.content)["annotations"]
+    assert [a["id"] for a in sent[:3]] == ["a1", "a2", "a3"]
+    assert sent[3] | {"id": None, "createdAt": None} == {
+        "type": "polygon", "label": "stroma", "color": "#ff0000", "id": None, "createdAt": None,
+        "points": [{"x": 1, "y": 2}, {"x": 9, "y": 2}, {"x": 5, "y": 12}],
+        "x": 1, "y": 2, "width": 8, "height": 10,
+    }
+    assert result["addedIds"] == [sent[3]["id"]]
+
+
+async def test_invalid_annotation_is_rejected(api):
+    result = await call_raw("add_annotations", {
+        "image_id": "img-1", "annotations": [{"type": "circle", "label": "c", "x": 1, "y": 1}],
+    })
+    assert result.isError
+    assert "circle needs radius" in result.content[0].text
+
+
+async def test_remove_annotations(api):
+    save = api.put(f"{API}/images/img-1/annotations").mock(return_value=ok({"imageId": "img-1", "annotationCount": 2}))
+    result = await call("remove_annotations", {"image_id": "img-1", "annotation_ids": ["a1", "missing"]})
+    assert result["removed"] == 1
+    assert [a["id"] for a in json.loads(save.calls.last.request.content)["annotations"]] == ["a2", "a3"]
+
+
+async def test_api_error_surfaces(api):
+    api.put(f"{API}/images/img-1/annotations").mock(
+        return_value=httpx.Response(403, json={"success": False, "error": "Permission denied"})
+    )
+    client = LabelImageClient()
+    with pytest.raises(ApiError, match="Permission denied"):
+        await client.save_annotations("img-1", [])
+    await client.aclose()
+
+
+async def test_upload_image_flow(api, tmp_path):
+    path = tmp_path / "photo.png"
+    Image.new("RGB", (64, 32)).save(path)
+    api.post(f"{API}/images/upload-url").mock(
+        return_value=ok({"imageId": "new", "uploadUrl": "https://s3.test/put", "imageUrl": "u"})
+    )
+    s3 = api.put("https://s3.test/put").mock(return_value=httpx.Response(200))
+    confirm = api.post(f"{API}/images/new/confirm").mock(return_value=ok({"imageId": "new", "filename": "photo.png"}))
+
+    result = await call("upload_image", {"path": str(path), "category": "Test"})
+
+    body = json.loads(confirm.calls.last.request.content)
+    assert result["imageId"] == "new"
+    assert (body["width"], body["height"], body["contentType"], body["category"]) == (64, 32, "image/png", "Test")
+    assert len(body["imageHash"]) == 64
+    assert s3.calls.last.request.headers["Content-Type"] == "image/png"
+
+
+def test_export_coco_matches_frontend_rules():
+    coco = export_coco(IMAGE)
+    # Pins are not exported, but every label still gets a category (same as exportUtils.ts)
+    assert [c["name"] for c in coco["categories"]] == ["nucleus", "tumor", "cell"]
+    poly, circle = coco["annotations"]
+    assert poly["bbox"] == [10, 20, 40, 30] and poly["area"] == 1200 and poly["category_id"] == 2
+    assert poly["attributes"] == {"confidence": "high"}
+    assert circle["bbox"] == [90, 40, 20, 20] and len(circle["segmentation"][0]) == 64
+
+
+def test_export_yolo_normalizes():
+    yolo = export_yolo(IMAGE)
+    assert yolo["classes"] == ["nucleus", "tumor", "cell"]
+    assert yolo["annotations"].splitlines() == ["1 0.15 0.35 0.2 0.3", "2 0.5 0.5 0.1 0.2"]

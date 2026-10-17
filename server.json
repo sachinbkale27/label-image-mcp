@@ -1,0 +1,43 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.sachinbkale27/label-image-mcp",
+  "title": "Image Label",
+  "description": "Manage images and annotations in the Image Label app, and export COCO or YOLO datasets.",
+  "version": "0.1.0",
+  "websiteUrl": "https://labels.sachin-kale.com/mcp",
+  "repository": {
+    "url": "https://github.com/sachinbkale27/label-image-mcp",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "label-image-mcp",
+      "version": "0.1.0",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "LABEL_USERNAME",
+          "description": "Image Label account username (needed to save annotations and upload)",
+          "isRequired": false
+        },
+        {
+          "name": "LABEL_PASSWORD",
+          "description": "Image Label account password",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "LABEL_API_URL",
+          "description": "API base URL",
+          "isRequired": false,
+          "default": "https://labels.sachin-kale.com/api"
+        }
+      ]
+    }
+  ]
+}

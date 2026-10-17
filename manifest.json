@@ -1,0 +1,71 @@
+{
+  "manifest_version": "0.4",
+  "name": "label-image-mcp",
+  "display_name": "Image Label",
+  "version": "0.1.0",
+  "description": "Manage images and annotations in the Image Label app, and export COCO or YOLO datasets.",
+  "long_description": "Lets Claude list, upload and describe images saved in Image Label (labels.sachin-kale.com), add or clean up annotations, and export COCO or YOLO training data. Needs an Image Label account to upload or save annotations.",
+  "author": {
+    "name": "Sachin Kale",
+    "url": "https://labels.sachin-kale.com"
+  },
+  "homepage": "https://labels.sachin-kale.com/mcp",
+  "documentation": "https://github.com/sachinbkale27/label-image-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sachinbkale27/label-image-mcp"
+  },
+  "server": {
+    "type": "uv",
+    "entry_point": "src/label_image_mcp/server.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": ["run", "--directory", "${__dirname}", "label-image-mcp"],
+      "env": {
+        "LABEL_USERNAME": "${user_config.username}",
+        "LABEL_PASSWORD": "${user_config.password}",
+        "LABEL_API_URL": "${user_config.api_url}"
+      }
+    }
+  },
+  "user_config": {
+    "username": {
+      "type": "string",
+      "title": "Username",
+      "description": "Image Label account username. Leave empty for read-only access.",
+      "required": false
+    },
+    "password": {
+      "type": "string",
+      "title": "Password",
+      "description": "Image Label account password",
+      "sensitive": true,
+      "required": false
+    },
+    "api_url": {
+      "type": "string",
+      "title": "API URL",
+      "description": "Only change this to use a different deployment",
+      "default": "https://labels.sachin-kale.com/api",
+      "required": false
+    }
+  },
+  "tools": [
+    { "name": "list_images", "description": "List saved images, optionally filtered by category" },
+    { "name": "get_image", "description": "Get an image's metadata, annotations and viewing URL" },
+    { "name": "update_image_metadata", "description": "Update an image's name, category or description" },
+    { "name": "add_annotations", "description": "Append annotations to an image" },
+    { "name": "replace_annotations", "description": "Replace all annotations on an image" },
+    { "name": "remove_annotations", "description": "Remove annotations by id" },
+    { "name": "upload_image", "description": "Upload a local image file" },
+    { "name": "export_annotations", "description": "Export annotations as COCO JSON or YOLO" }
+  ],
+  "compatibility": {
+    "platforms": ["darwin", "linux", "win32"],
+    "runtimes": {
+      "python": ">=3.10"
+    }
+  },
+  "keywords": ["image annotation", "coco", "yolo", "histopathology", "dataset"],
+  "license": "MIT"
+}
