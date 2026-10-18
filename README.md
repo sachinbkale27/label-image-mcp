@@ -51,6 +51,20 @@ claude mcp add label-image -e LABEL_USERNAME=... -e LABEL_PASSWORD=... -- uvx la
 }
 ```
 
+## Agent skill
+
+[`skills/label-image/SKILL.md`](skills/label-image/SKILL.md) teaches the agent when and how to
+use these tools: which annotation types end up in exports, cleaning up labels safely, and
+merging per-image exports into one COCO or YOLO dataset with consistent class ids (bundled
+`scripts/merge_exports.py`). It follows the open SKILL.md format, so it works in Claude Code and
+other agents that support skills.
+
+```bash
+# Claude Code: install for all your projects (or copy into a project's .claude/skills/)
+git clone --depth 1 https://github.com/sachinbkale27/label-image-mcp /tmp/label-image-mcp
+mkdir -p ~/.claude/skills && cp -r /tmp/label-image-mcp/skills/label-image ~/.claude/skills/
+```
+
 ## Configuration
 
 | Variable | Default | Purpose |
