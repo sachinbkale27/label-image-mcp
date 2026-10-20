@@ -21,9 +21,9 @@ LangGraph agent (label-image-agent)      Claude Desktop / Claude Code / any MCP 
 
 ## Account
 
-Uploading and saving annotations needs an Image Label account
-([request one](https://labels.sachin-kale.com/contact)). Without one, the tools can read but not
-save. Only images saved to your account are visible. Work kept only in your browser is not.
+The tools need an Image Label account ([request one](https://labels.sachin-kale.com/contact)).
+They see, change and upload only images saved to that account; without one they see no images.
+Work kept only in your browser is not visible to them.
 
 ## Install
 
@@ -69,7 +69,7 @@ mkdir -p ~/.claude/skills && cp -r /tmp/label-image-mcp/skills/label-image ~/.cl
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `LABEL_USERNAME` / `LABEL_PASSWORD` | unset | Account credentials. Without them requests are anonymous and read-only in practice |
+| `LABEL_USERNAME` / `LABEL_PASSWORD` | unset | Account credentials. Without them the tools see no images |
 | `LABEL_API_URL` | `https://labels.sachin-kale.com/api` | API base URL, for another deployment or `sam local start-api` |
 
 ## Tools

@@ -19,9 +19,9 @@ This skill drives the `label-image` MCP server, which manages images and annotat
    claude mcp add label-image -e LABEL_USERNAME=... -e LABEL_PASSWORD=... -- uvx label-image-mcp
    ```
    Other clients: https://github.com/sachinbkale27/label-image-mcp#install
-2. Writes need an account. Without credentials the tools can read, but uploading and saving
-   annotations fail. An `HTTP 401`/`403` error means missing or wrong credentials. Don't retry;
-   tell the user.
+2. The tools need an account: they only see and change images saved to it, and without
+   credentials they see none. An `HTTP 401`/`403` error means missing or wrong credentials.
+   Don't retry; tell the user.
 3. Only images saved to the account are visible. Work kept only in the browser is not.
 
 ## Data model you must respect

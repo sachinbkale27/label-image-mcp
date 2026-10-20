@@ -39,8 +39,8 @@ class LabelImageClient:
         await self._s3.aclose()
 
     async def _ensure_token(self) -> None:
-        # Without credentials, requests are anonymous: reads work, but saving
-        # annotations only works on records uploaded anonymously
+        # Without credentials, requests are anonymous and see no images: the API only
+        # returns, changes or accepts images for the logged-in account.
         if self._token or not (self.username and self.password):
             return
         data = await self._request(
@@ -53,6 +53,12 @@ class LabelImageClient:
             await self._ensure_token()
         headers = {"Authorization": f"Bearer {self._token}"} if auth and self._token else {}
         resp = await self._http.request(method, path, headers=headers, **kwargs)
+        if resp.status_code == 401 and auth and self._token:
+            # Sessions expire (12 hours): log in again once and retry.
+            self._token = None
+            await self._ensure_token()
+            headers = {"Authorization": f"Bearer {self._token}"} if self._token else {}
+            resp = await self._http.request(method, path, headers=headers, **kwargs)
         try:
             body = resp.json()
         except ValueError:
