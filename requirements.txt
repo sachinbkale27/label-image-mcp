@@ -1,0 +1,7 @@
+# Dependencies for the hosted Lambda deployment (sam build, see backend/template.yaml).
+# The package's own dependencies are declared in pyproject.toml.
+mcp==1.30.0
+httpx==0.28.1
+pillow==12.3.0
+pydantic==2.14.1
+uvicorn==0.54.0

@@ -13,7 +13,7 @@ This skill drives the `label-image` MCP server, which manages images and annotat
 
 1. Check that the tools are available: `list_images`, `get_image`, `update_image_metadata`,
    `add_annotations`, `replace_annotations`, `remove_annotations`, `upload_image`,
-   `export_annotations`. If they are missing, tell the user to install the server
+   `upload_image_from_url`, `export_annotations`. If they are missing, tell the user to install the server
    (credentials go in environment variables; never ask the user to paste a password into chat):
    ```bash
    claude mcp add label-image -e LABEL_USERNAME=... -e LABEL_PASSWORD=... -- uvx label-image-mcp
@@ -53,7 +53,8 @@ compact table rather than raw JSON.
 
 ### Upload
 `upload_image(path, name?, category?, description?)` reads the file **on the machine running the
-MCP server**. Use an absolute path. With a remote HTTP server, a local path won't exist. Set a
+MCP server**. Use an absolute path. With a remote HTTP server, a local path won't exist: use
+`upload_image_from_url(url, ...)` for images that are online. Set a
 `category` at upload: it's the only filter `list_images` has. Upload one file per call and
 report each new `imageId`.
 

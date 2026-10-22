@@ -145,3 +145,56 @@ def test_export_yolo_normalizes():
     yolo = export_yolo(IMAGE)
     assert yolo["classes"] == ["nucleus", "tumor", "cell"]
     assert yolo["annotations"].splitlines() == ["1 0.15 0.35 0.2 0.3", "2 0.5 0.5 0.1 0.2"]
+
+
+async def test_upload_image_from_url(api, monkeypatch):
+    monkeypatch.setenv("LABEL_UPLOAD_URL_HOSTS", "blog.test")
+    buf = __import__("io").BytesIO()
+    Image.new("RGB", (40, 30)).save(buf, format="PNG")
+    api.get("https://blog.test/media/cells.png").mock(
+        return_value=httpx.Response(200, content=buf.getvalue(), headers={"content-type": "image/png"})
+    )
+    api.post(f"{API}/images/upload-url").mock(return_value=ok({"imageId": "new", "uploadUrl": "https://s3.test/put"}))
+    api.put("https://s3.test/put").mock(return_value=httpx.Response(200))
+    confirm = api.post(f"{API}/images/new/confirm").mock(return_value=ok({"imageId": "new", "filename": "cells.png"}))
+
+    result = await call("upload_image_from_url", {"url": "https://blog.test/media/cells.png", "category": "Histo"})
+
+    body = json.loads(confirm.calls.last.request.content)
+    assert result["imageId"] == "new"
+    assert (body["filename"], body["width"], body["height"], body["category"]) == ("cells.png", 40, 30, "Histo")
+
+
+@pytest.mark.parametrize(
+    ("url", "response", "error"),
+    [
+        ("https://evil.test/x.png", None, "only allowed from: blog.test"),
+        ("https://blog.test/page", httpx.Response(200, text="<html>", headers={"content-type": "text/html"}), "Not an image"),
+        ("https://blog.test/moved.png", httpx.Response(302, headers={"location": "http://169.254.169.254/"}), "HTTP 302"),
+    ],
+)
+async def test_upload_image_from_url_rejects_unsafe_input(api, monkeypatch, url, response, error):
+    monkeypatch.setenv("LABEL_UPLOAD_URL_HOSTS", "blog.test")
+    if response is not None:
+        api.get(url).mock(return_value=response)
+    result = await call_raw("upload_image_from_url", {"url": url})
+    assert result.isError
+    assert error in result.content[0].text
+
+
+async def test_hosted_mode_requires_the_bearer_token(monkeypatch):
+    from starlette.testclient import TestClient
+
+    async def app(scope, receive, send):
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"ok"})
+
+    monkeypatch.delenv("LABEL_CREDENTIALS_SECRET", raising=False)
+    monkeypatch.delenv("MCP_AUTH_TOKEN", raising=False)
+    assert TestClient(server.BearerAuth(app)).post("/mcp").status_code == 503  # no token configured: closed
+
+    monkeypatch.setenv("MCP_AUTH_TOKEN", "s3cret")
+    client = TestClient(server.BearerAuth(app))
+    assert client.post("/mcp").status_code == 401
+    assert client.post("/mcp", headers={"Authorization": "Bearer wrong"}).status_code == 401
+    assert client.post("/mcp", headers={"Authorization": "Bearer s3cret"}).status_code == 200

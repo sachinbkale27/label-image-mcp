@@ -3,19 +3,34 @@
 from __future__ import annotations
 
 import hashlib
+import io
+import json
 import mimetypes
 import os
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from PIL import Image
 
 DEFAULT_API_URL = "https://labels.sachin-kale.com/api"
+MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024
+IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif", "image/bmp", "image/tiff"}
 
 
 class ApiError(RuntimeError):
     pass
+
+
+@lru_cache
+def load_secret(secret_id: str) -> dict[str, str]:
+    """A JSON secret from AWS Secrets Manager (used when hosted: LABEL_CREDENTIALS_SECRET).
+    Cached per process; a failed read (secret not created yet) is retried on the next call."""
+    import boto3  # only needed on AWS, where the Lambda runtime provides it
+
+    return json.loads(boto3.client("secretsmanager").get_secret_value(SecretId=secret_id)["SecretString"])
 
 
 class LabelImageClient:
@@ -38,10 +53,20 @@ class LabelImageClient:
         await self._http.aclose()
         await self._s3.aclose()
 
+    def _load_credentials(self) -> None:
+        # Hosted servers keep the account in Secrets Manager instead of environment variables
+        secret_id = os.environ.get("LABEL_CREDENTIALS_SECRET")
+        if secret_id and not (self.username and self.password):
+            secret = load_secret(secret_id)
+            self.username, self.password = secret.get("username"), secret.get("password")
+
     async def _ensure_token(self) -> None:
         # Without credentials, requests are anonymous and see no images: the API only
         # returns, changes or accepts images for the logged-in account.
-        if self._token or not (self.username and self.password):
+        if self._token:
+            return
+        self._load_credentials()
+        if not (self.username and self.password):
             return
         data = await self._request(
             "POST", "/admin/login", json={"username": self.username, "password": self.password}, auth=False
@@ -80,15 +105,47 @@ class LabelImageClient:
         return await self._request("PUT", f"/images/{image_id}/annotations", json={"annotations": annotations})
 
     async def upload_image(self, path: str | Path, **fields: str) -> dict[str, Any]:
-        """Same three-step flow as the frontend: presigned URL -> S3 PUT -> confirm."""
+        """Upload a local file."""
         file_path = Path(path).expanduser()
-        content = file_path.read_bytes()
         content_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
-        with Image.open(file_path) as img:
+        return await self.upload_bytes(file_path.read_bytes(), file_path.name, content_type, **fields)
+
+    async def download_image(self, url: str) -> tuple[bytes, str, str]:
+        """Fetch an image to upload: (content, filename, content type).
+
+        Only https URLs, or hosts listed in LABEL_UPLOAD_URL_HOSTS when that is set (which also
+        allows http for them, e.g. localhost). Redirects are not followed, so an allowed host
+        can't bounce the request elsewhere.
+        """
+        parsed = urlparse(url)
+        allowed = [h.strip().lower() for h in os.environ.get("LABEL_UPLOAD_URL_HOSTS", "").split(",") if h.strip()]
+        host = (parsed.hostname or "").lower()
+        if allowed and host not in allowed:
+            raise ApiError(f"Downloads are only allowed from: {', '.join(allowed)}")
+        if parsed.scheme != "https" and not (allowed and parsed.scheme == "http"):
+            raise ApiError("Image URLs must use https")
+        async with self._s3.stream("GET", url, follow_redirects=False) as resp:
+            if resp.status_code != 200:
+                raise ApiError(f"Downloading the image failed (HTTP {resp.status_code})")
+            content_type = resp.headers.get("content-type", "").split(";")[0].strip().lower()
+            if content_type not in IMAGE_TYPES:
+                raise ApiError(f"Not an image: {content_type or 'unknown content type'}")
+            chunks, size = [], 0
+            async for chunk in resp.aiter_bytes():
+                size += len(chunk)
+                if size > MAX_DOWNLOAD_BYTES:
+                    raise ApiError(f"Images larger than {MAX_DOWNLOAD_BYTES // (1024 * 1024)} MB are not accepted")
+                chunks.append(chunk)
+        filename = Path(parsed.path).name or "image"
+        return b"".join(chunks), filename, content_type
+
+    async def upload_bytes(self, content: bytes, filename: str, content_type: str, **fields: str) -> dict[str, Any]:
+        """Same three-step flow as the frontend: presigned URL -> S3 PUT -> confirm."""
+        with Image.open(io.BytesIO(content)) as img:
             width, height = img.size
 
         upload = await self._request(
-            "POST", "/images/upload-url", json={"filename": file_path.name, "contentType": content_type}
+            "POST", "/images/upload-url", json={"filename": filename, "contentType": content_type}
         )
         put = await self._s3.put(upload["uploadUrl"], content=content, headers={"Content-Type": content_type})
         if put.status_code >= 400:
@@ -100,7 +157,7 @@ class LabelImageClient:
             json={
                 "width": width,
                 "height": height,
-                "filename": file_path.name,
+                "filename": filename,
                 "fileSize": len(content),
                 "contentType": content_type,
                 "imageHash": hashlib.sha256(content).hexdigest(),

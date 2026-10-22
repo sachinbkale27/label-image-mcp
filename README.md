@@ -83,6 +83,7 @@ mkdir -p ~/.claude/skills && cp -r /tmp/label-image-mcp/skills/label-image ~/.cl
 | `replace_annotations(image_id, annotations)` | Replace all annotations |
 | `remove_annotations(image_id, annotation_ids)` | Remove annotations by id |
 | `upload_image(path, name?, category?, description?)` | Upload a local image file |
+| `upload_image_from_url(url, name?, category?, description?)` | Download an image from an https URL (up to 20 MB) and upload it |
 | `export_annotations(image_id, format)` | COCO JSON or YOLO, same output as the web app's export |
 
 There is deliberately no tool for deleting images.
@@ -95,6 +96,18 @@ There is deliberately no tool for deleting images.
 ```bash
 claude mcp add --transport http label-image http://127.0.0.1:8765/mcp
 ```
+
+## Hosted mode
+
+`label-image-mcp --http --hosted --host 0.0.0.0` is for running the server remotely, for example on
+AWS Lambda behind the Lambda Web Adapter. It keeps no session state, answers with JSON, and requires
+`Authorization: Bearer <token>` on every request; with no token configured it refuses all requests.
+
+| Variable | Purpose |
+|---|---|
+| `MCP_AUTH_TOKEN` | The bearer token clients must send |
+| `LABEL_CREDENTIALS_SECRET` | AWS Secrets Manager secret with `username`, `password` and `mcp_token`, instead of the variables above |
+| `LABEL_UPLOAD_URL_HOSTS` | Comma-separated hosts `upload_image_from_url` may download from (recommended when hosted) |
 
 ## LangGraph agent
 

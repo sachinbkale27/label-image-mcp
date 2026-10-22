@@ -20,7 +20,12 @@
     "entry_point": "src/label_image_mcp/server.py",
     "mcp_config": {
       "command": "uv",
-      "args": ["run", "--directory", "${__dirname}", "label-image-mcp"],
+      "args": [
+        "run",
+        "--directory",
+        "${__dirname}",
+        "label-image-mcp"
+      ],
       "env": {
         "LABEL_USERNAME": "${user_config.username}",
         "LABEL_PASSWORD": "${user_config.password}",
@@ -51,21 +56,59 @@
     }
   },
   "tools": [
-    { "name": "list_images", "description": "List saved images, optionally filtered by category" },
-    { "name": "get_image", "description": "Get an image's metadata, annotations and viewing URL" },
-    { "name": "update_image_metadata", "description": "Update an image's name, category or description" },
-    { "name": "add_annotations", "description": "Append annotations to an image" },
-    { "name": "replace_annotations", "description": "Replace all annotations on an image" },
-    { "name": "remove_annotations", "description": "Remove annotations by id" },
-    { "name": "upload_image", "description": "Upload a local image file" },
-    { "name": "export_annotations", "description": "Export annotations as COCO JSON or YOLO" }
+    {
+      "name": "list_images",
+      "description": "List saved images, optionally filtered by category"
+    },
+    {
+      "name": "get_image",
+      "description": "Get an image's metadata, annotations and viewing URL"
+    },
+    {
+      "name": "update_image_metadata",
+      "description": "Update an image's name, category or description"
+    },
+    {
+      "name": "add_annotations",
+      "description": "Append annotations to an image"
+    },
+    {
+      "name": "replace_annotations",
+      "description": "Replace all annotations on an image"
+    },
+    {
+      "name": "remove_annotations",
+      "description": "Remove annotations by id"
+    },
+    {
+      "name": "upload_image",
+      "description": "Upload a local image file"
+    },
+    {
+      "name": "upload_image_from_url",
+      "description": "Download an image from an https URL and upload it to Image Label"
+    },
+    {
+      "name": "export_annotations",
+      "description": "Export annotations as COCO JSON or YOLO"
+    }
   ],
   "compatibility": {
-    "platforms": ["darwin", "linux", "win32"],
+    "platforms": [
+      "darwin",
+      "linux",
+      "win32"
+    ],
     "runtimes": {
       "python": ">=3.10"
     }
   },
-  "keywords": ["image annotation", "coco", "yolo", "histopathology", "dataset"],
+  "keywords": [
+    "image annotation",
+    "coco",
+    "yolo",
+    "histopathology",
+    "dataset"
+  ],
   "license": "MIT"
 }
