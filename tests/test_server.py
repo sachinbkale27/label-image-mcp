@@ -198,3 +198,69 @@ async def test_hosted_mode_requires_the_bearer_token(monkeypatch):
     assert client.post("/mcp").status_code == 401
     assert client.post("/mcp", headers={"Authorization": "Bearer wrong"}).status_code == 401
     assert client.post("/mcp", headers={"Authorization": "Bearer s3cret"}).status_code == 200
+
+
+SEGMENTED = {
+    "imageId": "img-1", "width": 200, "height": 100, "model": "sam",
+    "results": [
+        {"polygon": [[10, 10], [60, 10], [60, 40], [10, 40]], "score": 0.97, "area": 1500, "bbox": [10, 10, 51, 31], "regions": 1},
+        {"error": "nothing found in this box or at this point", "score": 0.2},
+    ],
+}
+
+
+async def test_segment_objects_sends_prompts_and_saves_traced_polygons(api):
+    seg = api.post(f"{API}/images/img-1/segment").mock(return_value=ok(SEGMENTED))
+    save = api.put(f"{API}/images/img-1/annotations").mock(return_value=ok({"imageId": "img-1", "annotationCount": 4}))
+    result = await call("segment_objects", {
+        "image_id": "img-1",
+        "objects": [
+            {"label": "cell", "box": {"x": 5, "y": 5, "width": 60, "height": 40}},
+            {"label": "speck", "point": {"x": 150, "y": 80}},
+        ],
+    })
+    assert json.loads(seg.calls.last.request.content) == {
+        "model": "sam", "prompts": [{"box": [5, 5, 65, 45]}, {"point": [150, 80]}],
+    }
+    sent = json.loads(save.calls.last.request.content)["annotations"]
+    assert len(sent) == 4  # three existing + one traced
+    traced = sent[3]
+    assert traced["type"] == "polygon" and traced["label"] == "cell" and traced["confidence"] == "high"
+    assert traced["points"][0] == {"x": 10, "y": 10} and traced["width"] == 50
+    assert "SAM (score 0.97)" in traced["notes"]
+    assert result["added"][0]["id"] == traced["id"] and result["annotationCount"] == 4
+    assert result["failed"] == [{"label": "speck", "reason": "nothing found in this box or at this point"}]
+
+
+async def test_segment_objects_without_saving(api):
+    api.post(f"{API}/images/img-1/segment").mock(return_value=ok(SEGMENTED))
+    save = api.put(f"{API}/images/img-1/annotations")
+    result = await call("segment_objects", {
+        "image_id": "img-1", "save": False, "objects": [{"label": "cell", "box": {"x": 5, "y": 5, "width": 60, "height": 40}}, {"label": "b", "point": {"x": 1, "y": 1}}],
+    })
+    assert not save.called
+    assert result["outlines"][0]["label"] == "cell" and len(result["outlines"][0]["points"]) == 4
+
+
+async def test_medsam_needs_boxes(api):
+    result = await call_raw("segment_objects", {
+        "image_id": "img-1", "model": "medsam", "objects": [{"label": "lesion", "point": {"x": 5, "y": 5}}],
+    })
+    assert result.isError and "MedSAM needs a box" in result.content[0].text
+
+
+async def test_segment_retries_while_the_model_starts():
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        if request.url.path.endswith("/admin/login"):
+            return ok({"token": "tok"})
+        if len(calls) < 4:
+            return httpx.Response(503, json={"success": False, "error": "The segmentation model is starting up."})
+        return ok(SEGMENTED)
+
+    client = LabelImageClient(API, "alice", "secret", transport=httpx.MockTransport(handler))
+    result = await client.segment("img-1", [{"box": [0, 0, 5, 5]}], retry_delay=0)
+    assert result["model"] == "sam" and len(calls) == 4  # login, 503, 503, success
+    await client.aclose()

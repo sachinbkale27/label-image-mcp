@@ -89,6 +89,10 @@
       "description": "Download an image from an https URL and upload it to Image Label"
     },
     {
+      "name": "segment_objects",
+      "description": "Trace precise outlines with Segment Anything (SAM, or MedSAM for medical images) from rough boxes or points, and save them as polygons"
+    },
+    {
       "name": "export_annotations",
       "description": "Export annotations as COCO JSON or YOLO"
     }

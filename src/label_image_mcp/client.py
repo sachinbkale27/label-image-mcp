@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import io
 import json
@@ -21,7 +22,9 @@ IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif", "image/bmp"
 
 
 class ApiError(RuntimeError):
-    pass
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 @lru_cache
@@ -45,7 +48,7 @@ class LabelImageClient:
         self.username = username if username is not None else os.environ.get("LABEL_USERNAME")
         self.password = password if password is not None else os.environ.get("LABEL_PASSWORD")
         self._token: str | None = None
-        self._http = httpx.AsyncClient(base_url=self.base_url, timeout=30.0, transport=transport)
+        self._http = httpx.AsyncClient(base_url=self.base_url, timeout=35.0, transport=transport)  # the API itself gives up at 30 s
         # S3 presigned uploads go to a different host, so use a separate client
         self._s3 = httpx.AsyncClient(timeout=120.0, transport=transport)
 
@@ -87,9 +90,10 @@ class LabelImageClient:
         try:
             body = resp.json()
         except ValueError:
-            raise ApiError(f"{method} {path} returned HTTP {resp.status_code} with a non-JSON body")
+            raise ApiError(f"{method} {path} returned HTTP {resp.status_code} with a non-JSON body", resp.status_code)
         if resp.status_code >= 400 or not body.get("success", False):
-            raise ApiError(f"{method} {path} failed (HTTP {resp.status_code}): {body.get('error', 'unknown error')}")
+            error = body.get("error") or body.get("message") or "unknown error"
+            raise ApiError(f"{method} {path} failed (HTTP {resp.status_code}): {error}", resp.status_code)
         return body.get("data")
 
     async def list_images(self) -> list[dict[str, Any]]:
@@ -100,6 +104,22 @@ class LabelImageClient:
 
     async def update_image(self, image_id: str, updates: dict[str, str]) -> dict[str, Any]:
         return await self._request("PATCH", f"/images/{image_id}", json=updates)
+
+    async def segment(
+        self, image_id: str, prompts: list[dict[str, list[float]]], model: str = "sam", *, retry_delay: float = 10.0
+    ) -> dict[str, Any]:
+        """Trace outlines for box or point prompts with Segment Anything. The model can take longer than
+        the API's 30 seconds to start after a quiet spell (503/504), so that is retried twice."""
+        for attempt in range(3):
+            try:
+                return await self._request(
+                    "POST", f"/images/{image_id}/segment", json={"model": model, "prompts": prompts}
+                )
+            except ApiError as exc:
+                if exc.status not in (503, 504) or attempt == 2:
+                    raise
+                await asyncio.sleep(retry_delay)
+        raise AssertionError("unreachable")
 
     async def save_annotations(self, image_id: str, annotations: list[dict[str, Any]]) -> dict[str, Any]:
         return await self._request("PUT", f"/images/{image_id}/annotations", json={"annotations": annotations})

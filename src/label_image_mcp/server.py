@@ -184,6 +184,90 @@ async def upload_image_from_url(
     return _summary(await client.upload_bytes(content, filename, content_type, **fields))
 
 
+class Box(BaseModel):
+    x: float = Field(description="Left edge")
+    y: float = Field(description="Top edge")
+    width: float = Field(gt=0)
+    height: float = Field(gt=0)
+
+
+class SegmentTarget(BaseModel):
+    """One object to outline: a rough box around it (best), or a point on it."""
+
+    label: str
+    box: Box | None = Field(None, description="Rough box around the object, in image pixels; a loose box is fine")
+    point: Point | None = Field(None, description="A point on the object, when a box is hard to give")
+    color: str = DEFAULT_COLOR
+    notes: str | None = None
+
+    @model_validator(mode="after")
+    def _one_prompt(self) -> SegmentTarget:
+        if (self.box is None) == (self.point is None):
+            raise ValueError("give either a box or a point")
+        return self
+
+    def prompt(self) -> dict[str, list[float]]:
+        if self.box:
+            b = self.box
+            return {"box": [b.x, b.y, b.x + b.width, b.y + b.height]}
+        return {"point": [self.point.x, self.point.y]}  # type: ignore[union-attr]
+
+
+def _confidence(score: float) -> Literal["high", "medium", "low"]:
+    return "high" if score >= 0.95 else "medium" if score >= 0.85 else "low"
+
+
+@mcp.tool()
+async def segment_objects(
+    ctx: Context,
+    image_id: str,
+    objects: list[SegmentTarget],
+    model: Literal["sam", "medsam"] = "sam",
+    save: bool = True,
+) -> dict[str, Any]:
+    """Trace precise outlines with Segment Anything and add them as polygon annotations.
+
+    Give each object a rough box (or a point on it) in image pixels; the model finds the object's exact
+    edges, so the box only has to contain the object. Prefer this to drawing polygons yourself.
+    model: "sam" for photos and general images; "medsam" for medical images (CT, MRI, X-ray, ultrasound,
+    endoscopy, pathology), which takes boxes only. Up to 20 objects per call. With save=false the outlines
+    are returned without being saved. Each result has the model's quality score (0-1).
+    """
+    if not 1 <= len(objects) <= 20:
+        raise ValueError("Give 1 to 20 objects")
+    if model == "medsam" and any(o.box is None for o in objects):
+        raise ValueError("MedSAM needs a box for every object")
+    client = _client(ctx)
+    traced = await client.segment(image_id, [o.prompt() for o in objects], model)
+    new, failed, added = [], [], []
+    for target, result in zip(objects, traced["results"], strict=True):
+        if "polygon" not in result:
+            failed.append({"label": target.label, "reason": result.get("error", "no outline found")})
+            continue
+        score = result["score"]
+        annotation = AnnotationInput(
+            type="polygon",
+            label=target.label,
+            points=[Point(x=x, y=y) for x, y in result["polygon"]],
+            color=target.color,
+            confidence=_confidence(score),
+            notes=" ".join(filter(None, [target.notes, f"Traced by {model.upper()} (score {score:.2f})."])),
+        ).to_record()
+        new.append(annotation)
+        added.append(
+            {"label": target.label, "id": annotation["id"], "score": score, "points": len(result["polygon"]),
+             "area": result["area"], "bbox": result["bbox"]}
+        )
+    summary: dict[str, Any] = {"model": model, "added": added, "failed": failed}
+    if save and new:
+        image = await client.get_image(image_id)
+        saved = await client.save_annotations(image_id, (image.get("annotations") or []) + new)
+        summary["annotationCount"] = saved.get("annotationCount")
+    elif not save:
+        summary["outlines"] = [{"label": a["label"], "points": a["points"]} for a in new]
+    return summary
+
+
 @mcp.tool()
 async def export_annotations(ctx: Context, image_id: str, format: Literal["coco", "yolo"] = "coco") -> dict[str, Any]:
     """Export an image's polygon and circle annotations as COCO JSON or YOLO, same as the web app's export."""

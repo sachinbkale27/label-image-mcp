@@ -13,7 +13,7 @@ This skill drives the `label-image` MCP server, which manages images and annotat
 
 1. Check that the tools are available: `list_images`, `get_image`, `update_image_metadata`,
    `add_annotations`, `replace_annotations`, `remove_annotations`, `upload_image`,
-   `upload_image_from_url`, `export_annotations`. If they are missing, tell the user to install the server
+   `upload_image_from_url`, `export_annotations` (and `segment_objects` on newer servers). If they are missing, tell the user to install the server
    (credentials go in environment variables; never ask the user to paste a password into chat):
    ```bash
    claude mcp add label-image -e LABEL_USERNAME=... -e LABEL_PASSWORD=... -- uvx label-image-mcp
@@ -58,8 +58,16 @@ MCP server**. Use an absolute path. With a remote HTTP server, a local path won'
 `category` at upload: it's the only filter `list_images` has. Upload one file per call and
 report each new `imageId`.
 
+### Trace outlines (preferred)
+Use `segment_objects(image_id, objects)` when the server has it: give each object a `label` and a rough
+`box` (x, y, width, height; loose is fine, it only has to contain the object) or a `point` on it, and
+Segment Anything traces the exact edges and saves polygons. Use `model: "medsam"` for medical images
+(CT, MRI, X-ray, ultrasound, endoscopy, pathology), with a box for every object. Check `failed` in the
+result, and report the scores: an outline can be precise but of the wrong object if the box was off.
+
 ### Add annotations
-Use `add_annotations(image_id, [...])`. It keeps existing annotations and returns `addedIds`.
+Use `add_annotations(image_id, [...])` for pins, arrows and shapes the user specifies, or when
+`segment_objects` isn't available. It keeps existing annotations and returns `addedIds`.
 - Send all annotations for one image in a single call.
 - When you place shapes from your own view of the image (not coordinates the user or another
   tool gave you), set `confidence: "low"` or `"medium"`, say that the shapes are approximate,
