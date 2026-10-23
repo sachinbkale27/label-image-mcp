@@ -105,18 +105,28 @@ class LabelImageClient:
     async def update_image(self, image_id: str, updates: dict[str, str]) -> dict[str, Any]:
         return await self._request("PATCH", f"/images/{image_id}", json=updates)
 
+    async def warm_segmenter(self, model: str = "sam") -> dict[str, Any]:
+        """Start loading the segmentation model in the background; returns at once."""
+        return await self._request("POST", "/segment/warmup", json={"model": model})
+
     async def segment(
-        self, image_id: str, prompts: list[dict[str, list[float]]], model: str = "sam", *, retry_delay: float = 10.0
+        self,
+        image_id: str,
+        prompts: list[dict[str, list[float]]],
+        model: str = "sam",
+        *,
+        attempts: int = 6,
+        retry_delay: float = 15.0,
     ) -> dict[str, Any]:
-        """Trace outlines for box or point prompts with Segment Anything. The model can take longer than
-        the API's 30 seconds to start after a quiet spell (503/504), so that is retried twice."""
-        for attempt in range(3):
+        """Trace outlines for box or point prompts with Segment Anything. After a quiet spell the model takes
+        a minute or two to start, longer than the API's 30 seconds (503/504), so that is retried for a while."""
+        for attempt in range(attempts):
             try:
                 return await self._request(
                     "POST", f"/images/{image_id}/segment", json={"model": model, "prompts": prompts}
                 )
             except ApiError as exc:
-                if exc.status not in (503, 504) or attempt == 2:
+                if exc.status not in (503, 504) or attempt == attempts - 1:
                     raise
                 await asyncio.sleep(retry_delay)
         raise AssertionError("unreachable")

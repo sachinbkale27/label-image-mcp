@@ -261,6 +261,12 @@ async def test_segment_retries_while_the_model_starts():
         return ok(SEGMENTED)
 
     client = LabelImageClient(API, "alice", "secret", transport=httpx.MockTransport(handler))
-    result = await client.segment("img-1", [{"box": [0, 0, 5, 5]}], retry_delay=0)
+    result = await client.segment("img-1", [{"box": [0, 0, 5, 5]}], attempts=3, retry_delay=0)
     assert result["model"] == "sam" and len(calls) == 4  # login, 503, 503, success
     await client.aclose()
+
+
+async def test_warm_up_segmentation(api):
+    warm = api.post(f"{API}/segment/warmup").mock(return_value=ok({"warming": "medsam"}))
+    assert await call("warm_up_segmentation", {"model": "medsam"}) == {"warming": "medsam"}
+    assert json.loads(warm.calls.last.request.content) == {"model": "medsam"}

@@ -218,6 +218,16 @@ def _confidence(score: float) -> Literal["high", "medium", "low"]:
 
 
 @mcp.tool()
+async def warm_up_segmentation(ctx: Context, model: Literal["sam", "medsam"] = "sam") -> dict[str, Any]:
+    """Start loading the segmentation model ahead of segment_objects, without waiting for it.
+
+    After a quiet spell the model takes a minute or two to start; call this as soon as you know you will
+    segment (for example right after uploading), and do other work meanwhile.
+    """
+    return await _client(ctx).warm_segmenter(model)
+
+
+@mcp.tool()
 async def segment_objects(
     ctx: Context,
     image_id: str,

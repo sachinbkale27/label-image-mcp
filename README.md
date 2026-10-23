@@ -85,6 +85,7 @@ mkdir -p ~/.claude/skills && cp -r /tmp/label-image-mcp/skills/label-image ~/.cl
 | `upload_image(path, name?, category?, description?)` | Upload a local image file |
 | `upload_image_from_url(url, name?, category?, description?)` | Download an image from an https URL (up to 20 MB) and upload it |
 | `segment_objects(image_id, objects, model?, save?)` | Trace exact outlines with Segment Anything from a rough box or a point per object, and save them as polygons. `model`: `sam` (photos) or `medsam` (CT, MRI, X-ray, ultrasound, endoscopy, pathology; boxes only) |
+| `warm_up_segmentation(model?)` | Start loading the segmentation model without waiting (it takes a minute or two after a quiet spell) |
 | `export_annotations(image_id, format)` | COCO JSON or YOLO, same output as the web app's export |
 
 There is deliberately no tool for deleting images.
