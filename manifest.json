@@ -2,7 +2,7 @@
   "manifest_version": "0.4",
   "name": "label-image-mcp",
   "display_name": "Image Label",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Manage images and annotations in the Image Label app, and export COCO or YOLO datasets.",
   "long_description": "Lets Claude list, upload and describe images saved in Image Label (labels.sachin-kale.com), add or clean up annotations, and export COCO or YOLO training data. Needs an Image Label account to upload or save annotations.",
   "author": {
