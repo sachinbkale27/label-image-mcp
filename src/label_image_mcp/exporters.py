@@ -105,6 +105,47 @@ def export_yolo(image: dict[str, Any]) -> dict[str, Any]:
     return {"classes": list(class_ids), "annotations": "\n".join(lines)}
 
 
+def _rgb(color: str | None) -> list[int]:
+    value = (color or "#ff0000").lstrip("#")
+    if len(value) == 3:  # short form, e.g. #0f0
+        value = "".join(c * 2 for c in value)
+    try:
+        return [int(value[i : i + 2], 16) for i in (0, 2, 4)]
+    except ValueError:
+        return [255, 0, 0]
+
+
+def export_qupath(image: dict[str, Any]) -> dict[str, Any]:
+    """GeoJSON FeatureCollection that QuPath imports (File > Import objects): polygons, circles and rectangles
+    as polygons, pins as points, each classified by its label. Nuclei found by StarDist are detections,
+    everything else annotations, as QuPath distinguishes them."""
+    features = []
+    for ann in image.get("annotations") or []:
+        kind = ann.get("type")
+        if kind == "pin":
+            geometry: dict[str, Any] = {"type": "Point", "coordinates": [ann["x"], ann["y"]]}
+        elif _exportable(ann) or (kind == "rectangle" and ann.get("width") and ann.get("height")):
+            if kind == "circle":
+                points = _circle_points(ann["x"], ann["y"], ann["radius"])
+            elif kind == "rectangle":
+                x, y, w, h = ann["x"], ann["y"], ann["width"], ann["height"]
+                points = [{"x": x, "y": y}, {"x": x + w, "y": y}, {"x": x + w, "y": y + h}, {"x": x, "y": y + h}]
+            else:
+                points = ann["points"]
+            ring = [[round(p["x"], 1), round(p["y"], 1)] for p in points]
+            geometry = {"type": "Polygon", "coordinates": [ring + [ring[0]]]}  # GeoJSON rings are closed
+        else:
+            continue  # arrows have no area or position QuPath can use
+        properties: dict[str, Any] = {
+            "objectType": "detection" if "StarDist" in (ann.get("notes") or "") else "annotation",
+            "classification": {"name": ann["label"], "color": _rgb(ann.get("color"))},
+        }
+        if ann.get("notes"):
+            properties["name"] = ann["notes"][:200]
+        features.append({"type": "Feature", "id": ann.get("id"), "geometry": geometry, "properties": properties})
+    return {"type": "FeatureCollection", "features": features}
+
+
 def _fmt(value: float) -> str:
     # Match JS number formatting (0.5 not 0.50, 1 not 1.0)
     return str(int(value)) if value == int(value) else repr(value)

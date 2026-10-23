@@ -131,6 +131,20 @@ class LabelImageClient:
                 await asyncio.sleep(retry_delay)
         raise AssertionError("unreachable")
 
+    async def pathology(
+        self, image_id: str, action: str, *, attempts: int = 6, retry_delay: float = 10.0, **params: Any
+    ) -> dict[str, Any]:
+        """Run a histopathology tool on an image: "nuclei", "normalize" or "quality" ("warmup" starts the model
+        without waiting). Like segment, a cold start is longer than the API's 30 seconds, so 503/504 is retried."""
+        for attempt in range(attempts):
+            try:
+                return await self._request("POST", f"/images/{image_id}/pathology", json={"action": action, **params})
+            except ApiError as exc:
+                if exc.status not in (503, 504) or attempt == attempts - 1:
+                    raise
+                await asyncio.sleep(retry_delay)
+        raise AssertionError("unreachable")
+
     async def save_annotations(self, image_id: str, annotations: list[dict[str, Any]]) -> dict[str, Any]:
         return await self._request("PUT", f"/images/{image_id}/annotations", json={"annotations": annotations})
 

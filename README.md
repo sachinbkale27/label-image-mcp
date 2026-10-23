@@ -86,7 +86,11 @@ mkdir -p ~/.claude/skills && cp -r /tmp/label-image-mcp/skills/label-image ~/.cl
 | `upload_image_from_url(url, name?, category?, description?)` | Download an image from an https URL (up to 20 MB) and upload it |
 | `segment_objects(image_id, objects, model?, save?)` | Trace exact outlines with Segment Anything from a rough box or a point per object, and save them as polygons. `model`: `sam` (photos) or `medsam` (CT, MRI, X-ray, ultrasound, endoscopy, pathology; boxes only) |
 | `warm_up_segmentation(model?)` | Start loading the segmentation model without waiting (it takes a minute or two after a quiet spell) |
-| `export_annotations(image_id, format)` | COCO JSON or YOLO, same output as the web app's export |
+| `detect_nuclei(image_id, max_nuclei?, mark_enlarged?, replace_previous?, save?)` | Find and outline every nucleus in an H&E image with StarDist, automatically (no boxes). Returns count, density, median area and size variation; nuclei over 2.5x the median area are labelled `enlarged nucleus` |
+| `normalize_stain(image_id)` | Macenko stain normalization: a copy with standard H&E colours, saved as a new image |
+| `check_image_quality(image_id)` | HistoQC-style checks (tissue fraction, blur, marker pen, exposure, faint staining) with a verdict and warnings |
+| `warm_up_pathology()` | Start loading the nuclei model without waiting |
+| `export_annotations(image_id, format)` | COCO JSON or YOLO, same output as the web app's export, or `qupath`: GeoJSON for QuPath's File > Import objects (StarDist nuclei come in as detections) |
 
 There is deliberately no tool for deleting images.
 
@@ -95,6 +99,13 @@ There is deliberately no tool for deleting images.
 ([wanglab/medsam-vit-base](https://huggingface.co/wanglab/medsam-vit-base)) in a Lambda container
 (`backend/segment`). After a quiet spell the model takes a while to start; the client retries then.
 Results are for research and dataset building, not diagnosis.
+
+The histopathology tools call `POST /images/{id}/pathology`, which runs
+[StarDist](https://github.com/stardist/stardist) (BSD-3; its pretrained `2D_versatile_he` model was trained
+on public H&E datasets, some under non-commercial terms, so check them before commercial use),
+[torchstain](https://github.com/EIDOSLAB/torchstain) (MIT) and OpenCV quality measures in a second Lambda
+container (`backend/pathology`). Microscope photos come at many magnifications, so `detect_nuclei` also
+tries the image enlarged 2x and 3x and keeps the scale that finds the most nuclei.
 
 ## HTTP mode
 

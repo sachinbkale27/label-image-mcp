@@ -1,6 +1,6 @@
 [project]
 name = "label-image-mcp"
-version = "0.2.0"
+version = "0.3.0"
 description = "MCP server and LangGraph agent for the Image Label annotation app (labels.sachin-kale.com)"
 readme = "README.md"
 license = "MIT"

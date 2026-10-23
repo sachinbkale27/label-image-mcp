@@ -2,7 +2,7 @@
   "manifest_version": "0.4",
   "name": "label-image-mcp",
   "display_name": "Image Label",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Manage images and annotations in the Image Label app, and export COCO or YOLO datasets.",
   "long_description": "Lets Claude list, upload and describe images saved in Image Label (labels.sachin-kale.com), add or clean up annotations, and export COCO or YOLO training data. Needs an Image Label account to upload or save annotations.",
   "author": {
@@ -97,8 +97,24 @@
       "description": "Trace precise outlines with Segment Anything (SAM, or MedSAM for medical images) from rough boxes or points, and save them as polygons"
     },
     {
+      "name": "detect_nuclei",
+      "description": "Find and outline every cell nucleus in an H&E histology image with StarDist, marking enlarged nuclei"
+    },
+    {
+      "name": "normalize_stain",
+      "description": "Standardise an H&E image's colours (Macenko stain normalization), saved as a new image"
+    },
+    {
+      "name": "check_image_quality",
+      "description": "HistoQC-style checks of a histology image: tissue, blur, marker pen, exposure, faint staining"
+    },
+    {
+      "name": "warm_up_pathology",
+      "description": "Start loading the nuclei model in the background ahead of detect_nuclei"
+    },
+    {
       "name": "export_annotations",
-      "description": "Export annotations as COCO JSON or YOLO"
+      "description": "Export annotations as COCO JSON, YOLO or QuPath GeoJSON"
     }
   ],
   "compatibility": {

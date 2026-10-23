@@ -10,13 +10,13 @@ import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from mcp.server.fastmcp import Context, FastMCP
 from pydantic import BaseModel, Field, model_validator
 
 from .client import LabelImageClient, load_secret
-from .exporters import export_coco, export_yolo
+from .exporters import export_coco, export_qupath, export_yolo
 
 DEFAULT_COLOR = "#ff0000"
 
@@ -278,10 +278,108 @@ async def segment_objects(
     return summary
 
 
+NUCLEUS_COLOR = "#00b8d4"
+ENLARGED_COLOR = "#ff1744"
+
+
+def _nucleus_confidence(score: float) -> Literal["high", "medium", "low"]:
+    # StarDist only keeps candidates above about 0.69
+    return "high" if score >= 0.85 else "medium" if score >= 0.75 else "low"
+
+
 @mcp.tool()
-async def export_annotations(ctx: Context, image_id: str, format: Literal["coco", "yolo"] = "coco") -> dict[str, Any]:
-    """Export an image's polygon and circle annotations as COCO JSON or YOLO, same as the web app's export."""
+async def detect_nuclei(
+    ctx: Context,
+    image_id: str,
+    max_nuclei: Annotated[int, Field(ge=1, le=400)] = 300,
+    mark_enlarged: bool = True,
+    replace_previous: bool = True,
+    save: bool = True,
+) -> dict[str, Any]:
+    """Find and outline every cell nucleus in an H&E-stained histology image with StarDist, automatically.
+
+    No boxes needed: the model finds the nuclei itself (it is trained on H&E; other stains and non-histology
+    images give poor results). Returns the count, density, median nuclear area and how much nuclear size
+    varies (a rough measure of pleomorphism). With mark_enlarged, nuclei over 2.5x the median area are
+    labelled "enlarged nucleus" (in red), the rest "nucleus". The most confident max_nuclei outlines are
+    saved; replace_previous removes nuclei saved by an earlier run first. The first run after a quiet spell
+    takes up to a minute while the model starts.
+    """
+    client = _client(ctx)
+    found = await client.pathology(image_id, "nuclei", max_nuclei=max_nuclei)
+    new = []
+    for nucleus in found["nuclei"]:
+        enlarged = mark_enlarged and nucleus["enlarged"]
+        new.append(
+            AnnotationInput(
+                type="polygon",
+                label="enlarged nucleus" if enlarged else "nucleus",
+                points=[Point(x=x, y=y) for x, y in nucleus["polygon"]],
+                color=ENLARGED_COLOR if enlarged else NUCLEUS_COLOR,
+                confidence=_nucleus_confidence(nucleus["score"]),
+                notes=f"Detected by StarDist (score {nucleus['score']:.2f}, area {nucleus['area']} px).",
+            ).to_record()
+        )
+    summary: dict[str, Any] = {
+        "summary": found["summary"],
+        "scale": found.get("scale"),
+        "labels": {
+            "nucleus": sum(1 for a in new if a["label"] == "nucleus"),
+            "enlarged nucleus": sum(1 for a in new if a["label"] == "enlarged nucleus"),
+        },
+    }
+    if save and new:
+        image = await client.get_image(image_id)
+        kept = [
+            a for a in image.get("annotations") or []
+            if not (replace_previous and "StarDist" in (a.get("notes") or ""))
+        ]
+        saved = await client.save_annotations(image_id, kept + new)
+        summary["annotationCount"] = saved.get("annotationCount")
+        summary["removedPrevious"] = len(image.get("annotations") or []) - len(kept)
+    elif not save:
+        summary["outlines"] = [{"label": a["label"], "points": a["points"]} for a in new[:50]]
+    return summary
+
+
+@mcp.tool()
+async def normalize_stain(ctx: Context, image_id: str) -> dict[str, Any]:
+    """Make an H&E image's colours standard (Macenko stain normalization), saved as a NEW image.
+
+    Slides from different labs and scanners differ in pink and purple tones; normalizing them makes images
+    comparable and helps models such as detect_nuclei. The original is unchanged. Returns the new image.
+    """
+    result = await _client(ctx).pathology(image_id, "normalize")
+    return {"original": image_id, "normalized": _summary(result["normalized"])}
+
+
+@mcp.tool()
+async def check_image_quality(ctx: Context, image_id: str) -> dict[str, Any]:
+    """Check a histology image's quality before analysing it (HistoQC-style checks).
+
+    Measures how much of the image is tissue, blur, marker-pen ink, over- and under-exposure and faint
+    staining. Returns a verdict (good, check or poor), the measurements and plain-language warnings.
+    """
+    result = await _client(ctx).pathology(image_id, "quality")
+    return {k: result[k] for k in ("verdict", "warnings", "metrics", "width", "height")}
+
+
+@mcp.tool()
+async def warm_up_pathology(ctx: Context) -> dict[str, Any]:
+    """Start loading the nuclei model ahead of detect_nuclei, without waiting for it."""
+    # The API starts the model before it looks up an image, so any id will do
+    return await _client(ctx).pathology("warmup", "warmup")
+
+
+@mcp.tool()
+async def export_annotations(
+    ctx: Context, image_id: str, format: Literal["coco", "yolo", "qupath"] = "coco"
+) -> dict[str, Any]:
+    """Export an image's annotations: COCO JSON or YOLO (polygons and circles, as the web app exports), or
+    QuPath GeoJSON (File > Import objects in QuPath; nuclei found by StarDist come in as detections)."""
     image = await _client(ctx).get_image(image_id)
+    if format == "qupath":
+        return export_qupath(image)
     return export_coco(image) if format == "coco" else export_yolo(image)
 
 

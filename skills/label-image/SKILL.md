@@ -65,6 +65,16 @@ Segment Anything traces the exact edges and saves polygons. Use `model: "medsam"
 (CT, MRI, X-ray, ultrasound, endoscopy, pathology), with a box for every object. Check `failed` in the
 result, and report the scores: an outline can be precise but of the wrong object if the box was off.
 
+### Histopathology (H&E images)
+- `check_image_quality(image_id)` first when the image will be analysed: report its warnings (blur,
+  little tissue, pen marks, faint staining) before trusting any result.
+- `detect_nuclei(image_id)` outlines every nucleus automatically; no boxes needed. Report the count,
+  `median_area`, `area_variation` (higher means more variable nuclear size) and the number of enlarged
+  nuclei. These are measurements, not a diagnosis. It works on H&E stains only.
+- `normalize_stain(image_id)` saves a colour-standardised copy as a new image (report its new id); use it
+  for pale or unusually coloured slides, or before comparing slides from different labs.
+- `export_annotations(image_id, "qupath")` gives GeoJSON for QuPath.
+
 ### Add annotations
 Use `add_annotations(image_id, [...])` for pins, arrows and shapes the user specifies, or when
 `segment_objects` isn't available. It keeps existing annotations and returns `addedIds`.

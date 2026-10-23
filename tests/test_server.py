@@ -270,3 +270,59 @@ async def test_warm_up_segmentation(api):
     warm = api.post(f"{API}/segment/warmup").mock(return_value=ok({"warming": "medsam"}))
     assert await call("warm_up_segmentation", {"model": "medsam"}) == {"warming": "medsam"}
     assert json.loads(warm.calls.last.request.content) == {"model": "medsam"}
+
+
+NUCLEI = {
+    "imageId": "img-1", "action": "nuclei", "width": 200, "height": 100, "scale": 2,
+    "summary": {"count": 2, "per_megapixel": 100.0, "median_area": 30, "area_variation": 0.4, "enlarged": 1, "returned": 2},
+    "nuclei": [
+        {"polygon": [[10, 10], [14, 10], [14, 14], [10, 14]], "score": 0.9, "area": 16, "enlarged": False},
+        {"polygon": [[50, 50], [70, 50], [70, 70], [50, 70]], "score": 0.72, "area": 400, "enlarged": True},
+    ],
+}
+
+
+async def test_detect_nuclei_saves_outlines_and_replaces_an_earlier_run(api):
+    earlier = {"id": "old", "type": "polygon", "label": "nucleus", "x": 0, "y": 0, "width": 1, "height": 1,
+               "points": [{"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 1, "y": 1}], "notes": "Detected by StarDist (score 0.8)."}
+    api.get(f"{API}/images/img-1").mock(return_value=ok({**IMAGE, "annotations": IMAGE["annotations"] + [earlier]}))
+    run = api.post(f"{API}/images/img-1/pathology").mock(return_value=ok(NUCLEI))
+    save = api.put(f"{API}/images/img-1/annotations").mock(return_value=ok({"imageId": "img-1", "annotationCount": 5}))
+    result = await call("detect_nuclei", {"image_id": "img-1"})
+    assert json.loads(run.calls.last.request.content) == {"action": "nuclei", "max_nuclei": 300}
+    sent = json.loads(save.calls.last.request.content)["annotations"]
+    assert [a["id"] for a in sent[:3]] == ["a1", "a2", "a3"] and len(sent) == 5  # the earlier StarDist nucleus is gone
+    assert sent[3]["label"] == "nucleus" and sent[3]["confidence"] == "high"
+    assert sent[4]["label"] == "enlarged nucleus" and sent[4]["confidence"] == "low"
+    assert result["labels"] == {"nucleus": 1, "enlarged nucleus": 1} and result["removedPrevious"] == 1
+    assert result["summary"]["count"] == 2
+
+
+async def test_normalize_stain_and_quality(api):
+    normalized = {"imageId": "img-9", "filename": "cells-normalized.jpg", "name": "cells (stain-normalized)", "annotations": []}
+    run = api.post(f"{API}/images/img-1/pathology")
+    run.side_effect = [
+        ok({"imageId": "img-1", "action": "normalize", "normalized": normalized}),
+        ok({"imageId": "img-1", "action": "quality", "verdict": "check", "warnings": ["Faint staining"], "metrics": {}, "width": 200, "height": 100}),
+    ]
+    result = await call("normalize_stain", {"image_id": "img-1"})
+    assert result["original"] == "img-1" and result["normalized"]["imageId"] == "img-9"
+    quality = await call("check_image_quality", {"image_id": "img-1"})
+    assert quality["verdict"] == "check" and quality["warnings"] == ["Faint staining"]
+
+
+def test_export_qupath_geojson():
+    from label_image_mcp.exporters import export_qupath
+
+    image = {**IMAGE, "annotations": IMAGE["annotations"] + [
+        {"id": "n1", "type": "polygon", "label": "nucleus", "x": 0, "y": 0, "width": 4, "height": 4, "color": "#00b8d4",
+         "points": [{"x": 0, "y": 0}, {"x": 4, "y": 0}, {"x": 4, "y": 4}], "notes": "Detected by StarDist (score 0.9)."},
+        {"id": "r1", "type": "arrow", "label": "look", "x": 1, "y": 1, "arrowTarget": {"x": 5, "y": 5}},
+    ]}
+    features = export_qupath(image)["features"]
+    assert [f["id"] for f in features] == ["a1", "a2", "a3", "n1"]  # the arrow is left out
+    assert features[0]["geometry"] == {"type": "Point", "coordinates": [5, 5]}
+    ring = features[1]["geometry"]["coordinates"][0]
+    assert ring[0] == ring[-1] and len(ring) == 5
+    assert features[1]["properties"]["classification"] == {"name": "tumor", "color": [0, 255, 0]}
+    assert features[1]["properties"]["objectType"] == "annotation" and features[3]["properties"]["objectType"] == "detection"
