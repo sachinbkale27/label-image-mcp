@@ -132,7 +132,7 @@ class LabelImageClient:
         raise AssertionError("unreachable")
 
     async def pathology(
-        self, image_id: str, action: str, *, attempts: int = 6, retry_delay: float = 10.0, **params: Any
+        self, image_id: str, action: str, *, attempts: int = 8, retry_delay: float = 15.0, **params: Any
     ) -> dict[str, Any]:
         """Run a histopathology tool on an image: "nuclei", "normalize" or "quality" ("warmup" starts the model
         without waiting). Like segment, a cold start is longer than the API's 30 seconds, so 503/504 is retried."""
