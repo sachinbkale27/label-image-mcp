@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.sachinbkale27/label-image-mcp",
   "title": "Histopathology Annotation MCP",
-  "description": "Histopathology annotation: nuclei, outlines, QC. Try it: https://agent.sachin-kale.com/#annotate",
-  "version": "0.3.3",
+  "description": "H&E slide to training data in one chat: nuclei, outlines, QC → QuPath/COCO/YOLO. No GPU.",
+  "version": "0.3.4",
   "websiteUrl": "https://labels.sachin-kale.com/mcp",
   "repository": {
     "url": "https://github.com/sachinbkale27/label-image-mcp",
@@ -14,7 +14,7 @@
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "label-image-mcp",
-      "version": "0.3.3",
+      "version": "0.3.4",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
