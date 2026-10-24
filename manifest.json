@@ -2,9 +2,9 @@
   "manifest_version": "0.4",
   "name": "label-image-mcp",
   "display_name": "Histopathology Annotation MCP",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Histopathology annotation: nuclei, outlines, QC. Try it: https://agent.sachin-kale.com/#annotate",
-  "long_description": "Lets Claude list, upload and describe images saved in Image Label (labels.sachin-kale.com), add or clean up annotations, and export COCO or YOLO training data. Needs an Image Label account to upload or save annotations.",
+  "long_description": "Lets Claude list, upload and describe images saved in Image Label (labels.sachin-kale.com), add or clean up annotations, and export training data: COCO JSON, YOLO labels, YOLO classes or QuPath GeoJSON. Needs an Image Label account to upload or save annotations.",
   "author": {
     "name": "Sachin Kale",
     "url": "https://labels.sachin-kale.com"

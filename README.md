@@ -6,7 +6,7 @@ An [MCP](https://modelcontextprotocol.io) server for annotating histopathology a
 [Image Label](https://labels.sachin-kale.com), a free annotation tool. It lets Claude and other AI
 assistants upload images, outline every nucleus in an H&E slide automatically (StarDist), trace regions
 from rough boxes (Segment Anything, or MedSAM for medical images), check slide quality, normalize stain
-colours, clean up annotations, and export COCO, YOLO or QuPath GeoJSON. A LangGraph agent is included.
+colours, clean up annotations, and export training data as COCO JSON, YOLO labels, YOLO classes or QuPath GeoJSON. A LangGraph agent is included.
 
 **Try it in the browser:** [https://agent.sachin-kale.com/#annotate](https://agent.sachin-kale.com/#annotate): upload a slide and annotate it, detect nuclei, check
 its quality or get an AI interpretation, with no setup.

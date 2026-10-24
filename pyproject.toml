@@ -1,7 +1,7 @@
 [project]
 name = "label-image-mcp"
-version = "0.3.2"
-description = "Histopathology Annotation MCP: annotate histopathology and other images. Try it: https://agent.sachin-kale.com/#annotate"
+version = "0.3.3"
+description = "Histopathology Annotation MCP: annotate histopathology and other images. Training data: COCO JSON, YOLO labels, YOLO classes, QuPath GeoJSON. Try it: https://agent.sachin-kale.com/#annotate"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
