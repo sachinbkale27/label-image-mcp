@@ -3,7 +3,7 @@
   "name": "io.github.sachinbkale27/label-image-mcp",
   "title": "Histopathology Annotation MCP",
   "description": "Histopathology annotation: nuclei, outlines, QC. Try it: https://agent.sachin-kale.com/#annotate",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "websiteUrl": "https://labels.sachin-kale.com/mcp",
   "repository": {
     "url": "https://github.com/sachinbkale27/label-image-mcp",
@@ -14,7 +14,7 @@
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "label-image-mcp",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"

@@ -1,6 +1,6 @@
 [project]
 name = "label-image-mcp"
-version = "0.3.1"
+version = "0.3.2"
 description = "Histopathology Annotation MCP: annotate histopathology and other images. Try it: https://agent.sachin-kale.com/#annotate"
 readme = "README.md"
 license = "MIT"
@@ -31,7 +31,8 @@ agent = [
 ]
 
 [project.urls]
-Homepage = "https://labels.sachin-kale.com/mcp"
+Homepage = "https://agent.sachin-kale.com/#annotate"
+Documentation = "https://labels.sachin-kale.com/mcp"
 Source = "https://github.com/sachinbkale27/label-image-mcp"
 Issues = "https://github.com/sachinbkale27/label-image-mcp/issues"
 
