@@ -495,7 +495,7 @@ async def analyze_slide(
 ) -> dict[str, Any]:
     """Analyse a whole-slide image in the background and wait up to wait_seconds for the result.
 
-    Finds the tissue, samples up to max_tiles tiles of it (512 x 512 um each at 20x) and runs the quality
+    Finds the tissue, samples up to max_tiles tiles of it (256 x 256 um each at 40x) and runs the quality
     check and StarDist nuclei on each: nuclei per mm2, nuclear size in um2, size variation and enlarged nuclei
     across the slide, plus per-tile values. Takes about 10 seconds per tile, plus a minute when the model
     starts. If it's still running when the wait ends, call get_slide_analysis later. An analysis already

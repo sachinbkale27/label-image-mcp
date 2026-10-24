@@ -60,6 +60,22 @@ claude mcp add label-image -e LABEL_USERNAME=... -e LABEL_PASSWORD=... -- uvx la
 }
 ```
 
+## Your data
+
+What happens to images you upload through this server (hosted on AWS in us-east-1):
+
+- **Private to your account.** Only you can list, read or change your images; the storage bucket blocks all
+  public access, and viewing links are signed and expire after 24 hours. The service administrator can
+  access stored images, as with any hosted service.
+- **Deleted after 90 days**, automatically: files, slides, annotations and analysis results. Deleting an image
+  removes it straight away.
+- **Encrypted at rest** (AES-256) and in transit (HTTPS).
+- **Not used to train models**, and not sent to other AI services by this server: StarDist, Segment Anything
+  and MedSAM run on the service itself. Your AI assistant sees what its tools return (`view_image` returns
+  the picture), under that assistant's own terms.
+- **No patient identifiers, please.** Remove names, record numbers and slide labels (crop the label area or
+  use a de-identified copy) before uploading. Results are for research and education, not diagnosis.
+
 ## Agent skill
 
 [`skills/label-image/SKILL.md`](skills/label-image/SKILL.md) teaches the agent when and how to
@@ -112,7 +128,7 @@ ask before the destructive ones. The server also offers three prompts: **Analyse
 |---|---|
 | `upload_slide(path, name?, category?, analyze?, max_tiles?)` | Upload a whole-slide file (.svs, .ndpi, pyramidal .tif/.tiff, up to 5 GB; streamed, never loaded into memory) and start its analysis. Local server only |
 | `upload_slide_from_url(url, ...)` | The same from an https URL, copied straight into storage |
-| `analyze_slide(image_id, max_tiles?, restart?, wait_seconds?)` | Background analysis: finds the tissue, samples up to 48 tiles (512 × 512 µm at 20x), and runs the quality check and StarDist nuclei on each. Waits up to `wait_seconds` and reports progress |
+| `analyze_slide(image_id, max_tiles?, restart?, wait_seconds?)` | Background analysis: finds the tissue, samples up to 48 tiles (256 × 256 µm at 40x), and runs the quality check and StarDist nuclei on each. Waits up to `wait_seconds` and reports progress |
 | `get_slide_analysis(image_id)` | Status, or the results: nuclei per mm², median nuclear area in µm², size variation and enlarged nuclei across the slide, per-tile values and quality |
 
 After the analysis the slide's image in the library is its overview, with the analysed tiles marked (the
