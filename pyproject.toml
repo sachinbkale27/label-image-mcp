@@ -1,7 +1,7 @@
 [project]
 name = "label-image-mcp"
-version = "0.3.0"
-description = "MCP server and LangGraph agent for the Image Label annotation app (labels.sachin-kale.com)"
+version = "0.3.1"
+description = "Histopathology Annotation MCP: annotate histopathology and other images in Image Label (labels.sachin-kale.com)"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]

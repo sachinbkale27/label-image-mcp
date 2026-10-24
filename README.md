@@ -1,10 +1,14 @@
-# Image Label MCP server
+# Histopathology Annotation MCP
 
 <!-- mcp-name: io.github.sachinbkale27/label-image-mcp -->
 
-An [MCP](https://modelcontextprotocol.io) server for [Image Label](https://labels.sachin-kale.com),
-a free image annotation tool. It lets Claude and other AI assistants list and upload your images,
-add or clean up annotations, and export COCO or YOLO training data. A LangGraph agent is included.
+An [MCP](https://modelcontextprotocol.io) server for annotating histopathology and other images in
+[Image Label](https://labels.sachin-kale.com), a free annotation tool. It lets Claude and other AI
+assistants upload images, outline every nucleus in an H&E slide automatically (StarDist), trace regions
+from rough boxes (Segment Anything, or MedSAM for medical images), check slide quality, normalize stain
+colours, clean up annotations, and export COCO, YOLO or QuPath GeoJSON. A LangGraph agent is included.
+
+Published as `label-image-mcp` (PyPI) and `io.github.sachinbkale27/label-image-mcp` (MCP Registry).
 
 Use cases and setup guide: https://labels.sachin-kale.com/mcp
 

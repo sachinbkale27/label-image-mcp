@@ -1,9 +1,9 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.sachinbkale27/label-image-mcp",
-  "title": "Image Label",
-  "description": "Manage images and annotations in the Image Label app, and export COCO or YOLO datasets.",
-  "version": "0.3.0",
+  "title": "Histopathology Annotation MCP",
+  "description": "Annotate histopathology images: StarDist nuclei, SAM/MedSAM outlines, QC, COCO/YOLO/QuPath export.",
+  "version": "0.3.1",
   "websiteUrl": "https://labels.sachin-kale.com/mcp",
   "repository": {
     "url": "https://github.com/sachinbkale27/label-image-mcp",
@@ -14,7 +14,7 @@
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "label-image-mcp",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
