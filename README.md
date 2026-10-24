@@ -2,7 +2,7 @@
 
 <!-- mcp-name: io.github.sachinbkale27/label-image-mcp -->
 
-**From H&E slide to training data in one conversation: nuclei, outlines and slide QC, exported to QuPath, COCO or YOLO. No GPU needed.**
+**Image Annotation, including Histopathology slides; From H&E slide to training data in one conversation: nuclei, outlines and slide QC, exported to QuPath, COCO or YOLO. No GPU needed.**
 
 An [MCP](https://modelcontextprotocol.io) server for annotating histopathology and other images in
 [Image Label](https://labels.sachin-kale.com), a free annotation tool. It lets Claude and other AI
