@@ -145,6 +145,17 @@ class LabelImageClient:
                 await asyncio.sleep(retry_delay)
         raise AssertionError("unreachable")
 
+    async def fetch_image(self, image_id: str) -> tuple[dict[str, Any], bytes]:
+        """An image's record and its file, from the record's signed download URL."""
+        image = await self.get_image(image_id)
+        url = image.get("downloadUrl") or image.get("url")
+        if not url:
+            raise ApiError(f"Image {image_id} has no download URL")
+        resp = await self._s3.get(url)
+        if resp.status_code != 200:
+            raise ApiError(f"Downloading image {image_id} failed (HTTP {resp.status_code})")
+        return image, resp.content
+
     async def save_annotations(self, image_id: str, annotations: list[dict[str, Any]]) -> dict[str, Any]:
         return await self._request("PUT", f"/images/{image_id}/annotations", json={"annotations": annotations})
 

@@ -87,6 +87,7 @@ mkdir -p ~/.claude/skills && cp -r /tmp/label-image-mcp/skills/label-image ~/.cl
 |---|---|
 | `list_images(category?)` | Image summaries with annotation counts |
 | `get_image(image_id)` | Metadata, annotations and a signed viewing URL |
+| `view_image(image_id, with_annotations?, region?, grid?, max_size?)` | The picture itself, for the assistant to look at: scaled down, with a grid labelled in image pixels, optionally with the annotations drawn on, or zoomed into a region. Use it to place boxes for `segment_objects` and to check outlines |
 | `update_image_metadata(image_id, name?, category?, sub_category?, description?)` | Edit image details |
 | `add_annotations(image_id, annotations)` | Append pins, polygons, circles, rectangles or arrows |
 | `replace_annotations(image_id, annotations)` | Replace all annotations |
@@ -94,12 +95,19 @@ mkdir -p ~/.claude/skills && cp -r /tmp/label-image-mcp/skills/label-image ~/.cl
 | `upload_image(path, name?, category?, description?)` | Upload a local image file |
 | `upload_image_from_url(url, name?, category?, description?)` | Download an image from an https URL (up to 20 MB) and upload it |
 | `segment_objects(image_id, objects, model?, save?)` | Trace exact outlines with Segment Anything from a rough box or a point per object, and save them as polygons. `model`: `sam` (photos) or `medsam` (CT, MRI, X-ray, ultrasound, endoscopy, pathology; boxes only) |
-| `warm_up_segmentation(model?)` | Start loading the segmentation model without waiting (it takes a minute or two after a quiet spell) |
-| `detect_nuclei(image_id, max_nuclei?, mark_enlarged?, replace_previous?, save?)` | Find and outline every nucleus in an H&E image with StarDist, automatically (no boxes). Returns count, density, median area and size variation; nuclei over 2.5x the median area are labelled `enlarged nucleus` |
+| `detect_nuclei(image_id, max_nuclei?, mark_enlarged?, replace_previous?, save?, microns_per_pixel?)` | Find and outline every nucleus in an H&E image with StarDist, automatically (no boxes). Returns count, density, median area and size variation; nuclei over 2.5x the median area are labelled `enlarged nucleus`. With `microns_per_pixel` (often 0.25 at 40x, 0.5 at 20x) also in µm² and nuclei per mm² |
 | `normalize_stain(image_id)` | Macenko stain normalization: a copy with standard H&E colours, saved as a new image |
 | `check_image_quality(image_id)` | HistoQC-style checks (tissue fraction, blur, marker pen, exposure, faint staining) with a verdict and warnings |
-| `warm_up_pathology()` | Start loading the nuclei model without waiting |
+| `warm_up(model?)` | Start loading a model without waiting: `sam`, `medsam` or `nuclei` (each takes a minute or two after a quiet spell) |
 | `export_annotations(image_id, format)` | COCO JSON or YOLO, same output as the web app's export, or `qupath`: GeoJSON for QuPath's File > Import objects (StarDist nuclei come in as detections) |
+| `export_dataset(format?, category?, image_ids?, classes?, output_dir?)` | Many images (a category, or up to 100 ids) as ONE dataset with one class list: a COCO file, YOLO classes plus a label file per image, or a QuPath GeoJSON per image. `output_dir` writes the files (local server only) |
+
+Every tool is marked read-only or destructive (`replace_annotations`, `remove_annotations`), so clients can
+ask before the destructive ones. The server also offers three prompts: **Analyse a histology slide**,
+**Outline objects in an image** and **Build a training dataset**.
+
+Images are slide regions or snapshots (PNG, JPEG, WebP, TIFF and others, up to 20 MB), not whole-slide
+files such as .svs or .ndpi: export a region from your slide viewer first.
 
 There is deliberately no tool for deleting images.
 

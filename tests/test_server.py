@@ -266,10 +266,13 @@ async def test_segment_retries_while_the_model_starts():
     await client.aclose()
 
 
-async def test_warm_up_segmentation(api):
+async def test_warm_up_starts_the_chosen_model(api):
     warm = api.post(f"{API}/segment/warmup").mock(return_value=ok({"warming": "medsam"}))
-    assert await call("warm_up_segmentation", {"model": "medsam"}) == {"warming": "medsam"}
+    assert await call("warm_up", {"model": "medsam"}) == {"warming": "medsam"}
     assert json.loads(warm.calls.last.request.content) == {"model": "medsam"}
+    nuclei = api.post(f"{API}/images/warmup/pathology").mock(return_value=ok({"warming": True}))
+    await call("warm_up", {"model": "nuclei"})
+    assert json.loads(nuclei.calls.last.request.content) == {"action": "warmup"}
 
 
 NUCLEI = {
@@ -326,3 +329,86 @@ def test_export_qupath_geojson():
     assert ring[0] == ring[-1] and len(ring) == 5
     assert features[1]["properties"]["classification"] == {"name": "tumor", "color": [0, 255, 0]}
     assert features[1]["properties"]["objectType"] == "annotation" and features[3]["properties"]["objectType"] == "detection"
+
+
+async def test_detect_nuclei_in_microns(api):
+    api.post(f"{API}/images/img-1/pathology").mock(return_value=ok(NUCLEI))
+    save = api.put(f"{API}/images/img-1/annotations").mock(return_value=ok({"imageId": "img-1", "annotationCount": 5}))
+    result = await call("detect_nuclei", {"image_id": "img-1", "microns_per_pixel": 0.5})
+    # 30 px x 0.25 um2/px; 2 nuclei in 200 x 100 px = 5,000 um2 = 0.005 mm2
+    assert result["summary"]["median_area_um2"] == 7.5 and result["summary"]["per_mm2"] == 400.0
+    assert "4.0 \u00b5m\u00b2" in json.loads(save.calls.last.request.content)["annotations"][3]["notes"]
+
+
+def _png(width=200, height=100) -> bytes:
+    import io
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (width, height), (240, 200, 220)).save(buffer, "PNG")
+    return buffer.getvalue()
+
+
+async def test_view_image_returns_the_picture_with_a_grid_and_annotations(api):
+    api.get(f"{API}/images/img-1").mock(return_value=ok({**IMAGE, "downloadUrl": "https://s3.test/cells.png"}))
+    api.get("https://s3.test/cells.png").mock(return_value=httpx.Response(200, content=_png()))
+    result = await call_raw("view_image", {"image_id": "img-1", "with_annotations": True})
+    assert not result.isError, result.content
+    info, picture = result.content
+    data = json.loads(info.text)
+    assert picture.type == "image" and picture.mimeType == "image/jpeg"
+    assert data["image_size"] == [200, 100] and data["scale"] == 1 and data["grid_every"] == 20
+    assert {d["label"]: d["count"] for d in data["annotations_drawn"]} == {"nucleus": 1, "tumor": 1, "cell": 1}
+
+    zoom = await call_raw("view_image", {"image_id": "img-1", "with_annotations": True, "region": {"x": 0, "y": 0, "width": 60, "height": 60}})
+    data = json.loads(zoom.content[0].text)
+    assert data["shown_region"] == [0, 0, 60, 60] and {d["label"] for d in data["annotations_drawn"]} == {"nucleus", "tumor"}
+
+    plain = await call_raw("view_image", {"image_id": "img-1"})
+    assert "annotations_drawn" not in json.loads(plain.content[0].text)
+
+
+async def test_export_dataset_uses_one_class_list(api):
+    second = {**IMAGE, "imageId": "img-2", "filename": "cells.png", "annotations": [
+        {"id": "b1", "type": "circle", "label": "cell", "x": 20, "y": 20, "radius": 5, "color": "#00f", "createdAt": "t"},
+    ]}
+    api.get(f"{API}/images/img-2").mock(return_value=ok(second))
+    coco = (await call("export_dataset", {"image_ids": ["img-1", "img-2"], "classes": ["cell"]}))["dataset"]
+    assert [c["name"] for c in coco["categories"]] == ["cell", "tumor"]
+    assert [(a["image_id"], a["category_id"]) for a in coco["annotations"]] == [(1, 2), (1, 1), (2, 1)]
+    yolo = await call("export_dataset", {"image_ids": ["img-1", "img-2"], "format": "yolo"})
+    assert yolo["classes"] == ["tumor", "cell"]
+    assert sorted(yolo["dataset"]["files"]) == ["cells.txt", "cells_2.txt"]  # same file name, kept apart
+    assert yolo["dataset"]["files"]["cells_2.txt"].startswith("1 ")
+    by_category = await call("export_dataset", {"category": "histopathology", "format": "qupath"})
+    assert by_category["images"] == 1 and list(by_category["dataset"]["files"]) == ["cells.geojson"]
+
+
+async def test_export_dataset_writes_files_locally(api, tmp_path):
+    result = await call("export_dataset", {"image_ids": ["img-1"], "format": "yolo", "output_dir": str(tmp_path)})
+    assert result["files"] == ["classes.txt", "labels/cells.txt"] and "dataset" not in result
+    assert (tmp_path / "classes.txt").read_text() == "tumor\ncell\n"
+
+
+async def test_tools_say_what_they_change():
+    tools = {t.name: t for t in await server.mcp.list_tools()}
+    assert all(t.title and t.annotations for t in tools.values())
+    assert tools["replace_annotations"].annotations.destructiveHint is True
+    assert tools["view_image"].annotations.readOnlyHint is True
+    assert "view_image" in server.mcp.instructions
+
+
+async def test_hosted_server_has_no_local_file_tools(monkeypatch):
+    monkeypatch.setattr(server, "HOSTED", False)
+    tool = server.mcp._tool_manager.get_tool("upload_image")
+    try:
+        server.configure_hosted()
+        assert "upload_image" not in {t.name for t in await server.mcp.list_tools()}
+    finally:
+        server.mcp._tool_manager._tools["upload_image"] = tool  # restore for the other tests
+
+
+async def test_prompts_are_offered():
+    prompts = {p.name for p in await server.mcp.list_prompts()}
+    assert prompts == {"analyse_slide", "outline_objects", "build_training_dataset"}
+    result = await server.mcp.get_prompt("analyse_slide", {"image": "img-1", "microns_per_pixel": "0.25"})
+    assert "detect_nuclei with microns_per_pixel=0.25" in result.messages[0].content.text

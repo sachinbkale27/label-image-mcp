@@ -149,3 +149,59 @@ def export_qupath(image: dict[str, Any]) -> dict[str, Any]:
 def _fmt(value: float) -> str:
     # Match JS number formatting (0.5 not 0.50, 1 not 1.0)
     return str(int(value)) if value == int(value) else repr(value)
+
+
+def _stems(images: list[dict[str, Any]]) -> list[str]:
+    """A unique file stem per image (scan.png -> scan, a second scan.png -> scan_2), for YOLO and QuPath files."""
+    stems: list[str] = []
+    for image in images:
+        stem = (image.get("filename") or image.get("imageId") or "image").rsplit(".", 1)[0] or "image"
+        candidate, n = stem, 1
+        while candidate in stems:
+            n += 1
+            candidate = f"{stem}_{n}"
+        stems.append(candidate)
+    return stems
+
+
+def export_dataset(images: list[dict[str, Any]], fmt: str, classes: list[str] | None = None) -> dict[str, Any]:
+    """Several images as one dataset with one class list, so class ids mean the same in every image.
+
+    classes fixes the order of class ids; labels not listed follow in first-seen order.
+    coco: one COCO file covering every image. yolo: classes plus one label file per image (named after the
+    image). qupath: one GeoJSON file per image (QuPath imports objects per image).
+    """
+    names: list[str] = []
+    for name in [*(classes or []), *(a["label"] for i in images for a in i.get("annotations") or [] if _exportable(a))]:
+        if name not in names:
+            names.append(name)
+    stems = _stems(images)
+    if fmt == "qupath":
+        return {"files": {f"{stem}.geojson": export_qupath(image) for stem, image in zip(stems, images)}}
+    if fmt == "yolo":
+        files = {}
+        for stem, image in zip(stems, images):
+            single = export_yolo(image)
+            lines = []
+            for line in filter(None, single["annotations"].split("\n")):
+                local, rest = line.split(" ", 1)
+                lines.append(f"{names.index(single['classes'][int(local)])} {rest}")
+            files[f"{stem}.txt"] = "\n".join(lines)
+        return {"classes": names, "files": files}
+    merged_images, merged_annotations = [], []
+    for image_id, image in enumerate(images, start=1):
+        single = export_coco(image)
+        local = {c["id"]: c["name"] for c in single["categories"]}
+        merged_images.append({**single["images"][0], "id": image_id})
+        for ann in single["annotations"]:
+            merged_annotations.append(
+                {**ann, "id": len(merged_annotations) + 1, "image_id": image_id, "category_id": names.index(local[ann["category_id"]]) + 1}
+            )
+    info = export_coco({"filename": "", "width": 1, "height": 1})["info"]
+    info["description"] = f"{len(images)} images exported from Image Label"
+    return {
+        "info": info,
+        "images": merged_images,
+        "annotations": merged_annotations,
+        "categories": [{"id": i + 1, "name": n, "supercategory": "object"} for i, n in enumerate(names)],
+    }

@@ -2,7 +2,7 @@
   "manifest_version": "0.4",
   "name": "label-image-mcp",
   "display_name": "Histopathology Annotation MCP",
-  "version": "0.3.6",
+  "version": "0.4.0",
   "description": "Image Annotation, including Histopathology slides; From H&E slide to training data in one conversation: nuclei, outlines and slide QC, exported to QuPath, COCO or YOLO. No GPU needed.",
   "long_description": "Lets Claude list, upload and describe images saved in Image Label (labels.sachin-kale.com), add or clean up annotations, and export training data: COCO JSON, YOLO labels, YOLO classes or QuPath GeoJSON. Needs an Image Label account to upload or save annotations.",
   "author": {
@@ -10,7 +10,6 @@
     "url": "https://labels.sachin-kale.com"
   },
   "homepage": "https://agent.sachin-kale.com/#annotate",
-  "documentation": "https://labels.sachin-kale.com/mcp",
   "documentation": "https://github.com/sachinbkale27/label-image-mcp#readme",
   "repository": {
     "type": "git",
@@ -66,6 +65,10 @@
       "description": "Get an image's metadata, annotations and viewing URL"
     },
     {
+      "name": "view_image",
+      "description": "See an image with a pixel grid, optionally with its annotations drawn on or zoomed into a region"
+    },
+    {
       "name": "update_image_metadata",
       "description": "Update an image's name, category or description"
     },
@@ -90,10 +93,6 @@
       "description": "Download an image from an https URL and upload it to Image Label"
     },
     {
-      "name": "warm_up_segmentation",
-      "description": "Start loading the segmentation model in the background ahead of segment_objects"
-    },
-    {
       "name": "segment_objects",
       "description": "Trace precise outlines with Segment Anything (SAM, or MedSAM for medical images) from rough boxes or points, and save them as polygons"
     },
@@ -110,12 +109,16 @@
       "description": "HistoQC-style checks of a histology image: tissue, blur, marker pen, exposure, faint staining"
     },
     {
-      "name": "warm_up_pathology",
-      "description": "Start loading the nuclei model in the background ahead of detect_nuclei"
+      "name": "warm_up",
+      "description": "Start loading a model (SAM, MedSAM or the nuclei model) ahead of use"
     },
     {
       "name": "export_annotations",
       "description": "Export annotations as COCO JSON, YOLO or QuPath GeoJSON"
+    },
+    {
+      "name": "export_dataset",
+      "description": "Export many images as one COCO, YOLO or QuPath dataset with one class list"
     }
   ],
   "compatibility": {
@@ -135,5 +138,34 @@
     "histopathology",
     "dataset"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "prompts": [
+    {
+      "name": "analyse_slide",
+      "description": "Quality check, nuclei and a look at the result for one H&E image",
+      "arguments": [
+        "image",
+        "microns_per_pixel"
+      ],
+      "text": "Analyse the H&E histology image ${arguments.image}: check its quality, detect nuclei (microns_per_pixel ${arguments.microns_per_pixel}), view the result and summarise it."
+    },
+    {
+      "name": "outline_objects",
+      "description": "Outline named objects with Segment Anything, checking the result",
+      "arguments": [
+        "image",
+        "objects"
+      ],
+      "text": "Outline ${arguments.objects} in the image ${arguments.image}: view it, segment each object from a rough box, and check the outlines."
+    },
+    {
+      "name": "build_training_dataset",
+      "description": "Check a category's labels and export it as one dataset",
+      "arguments": [
+        "category",
+        "format"
+      ],
+      "text": "Build a ${arguments.format} training dataset from the images in category ${arguments.category}, after checking for inconsistent labels."
+    }
+  ]
 }

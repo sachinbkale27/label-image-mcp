@@ -58,7 +58,13 @@ MCP server**. Use an absolute path. With a remote HTTP server, a local path won'
 `category` at upload: it's the only filter `list_images` has. Upload one file per call and
 report each new `imageId`.
 
+### Look at the image
+`view_image(image_id)` (0.4.0+) shows the picture with a grid labelled in image pixels: read boxes and
+points off it instead of guessing. `region` zooms into part of a large image. After annotating, call it
+with `with_annotations: true` and fix outlines that landed on the wrong object.
+
 ### Trace outlines (preferred)
+Call `warm_up("sam")` (or `"medsam"`) as soon as you know you will segment.
 Use `segment_objects(image_id, objects)` when the server has it: give each object a `label` and a rough
 `box` (x, y, width, height; loose is fine, it only has to contain the object) or a `point` on it, and
 Segment Anything traces the exact edges and saves polygons. Use `model: "medsam"` for medical images
@@ -68,12 +74,17 @@ result, and report the scores: an outline can be precise but of the wrong object
 ### Histopathology (H&E images)
 - `check_image_quality(image_id)` first when the image will be analysed: report its warnings (blur,
   little tissue, pen marks, faint staining) before trusting any result.
-- `detect_nuclei(image_id)` outlines every nucleus automatically; no boxes needed. Report the count,
+- Call `warm_up("nuclei")` early: the first run after a quiet spell takes up to a minute.
+- `detect_nuclei(image_id)` outlines every nucleus automatically; no boxes needed. Pass
+  `microns_per_pixel` when the scanner resolution is known (often 0.25 at 40x, 0.5 at 20x) to get
+  `median_area_um2` and `per_mm2`. Report the count,
   `median_area`, `area_variation` (higher means more variable nuclear size) and the number of enlarged
   nuclei. These are measurements, not a diagnosis. It works on H&E stains only.
 - `normalize_stain(image_id)` saves a colour-standardised copy as a new image (report its new id); use it
   for pale or unusually coloured slides, or before comparing slides from different labs.
 - `export_annotations(image_id, "qupath")` gives GeoJSON for QuPath.
+- For a dataset of many images, `export_dataset(format, category=... or image_ids=[...])` (0.4.0+) gives
+  one class list across all of them, so the merge script below is only needed for older servers.
 
 ### Add annotations
 Use `add_annotations(image_id, [...])` for pins, arrows and shapes the user specifies, or when
