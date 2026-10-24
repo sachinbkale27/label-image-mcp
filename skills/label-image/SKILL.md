@@ -83,6 +83,11 @@ result, and report the scores: an outline can be precise but of the wrong object
 - `normalize_stain(image_id)` saves a colour-standardised copy as a new image (report its new id); use it
   for pale or unusually coloured slides, or before comparing slides from different labs.
 - `export_annotations(image_id, "qupath")` gives GeoJSON for QuPath.
+- Whole slides (.svs, .ndpi, pyramidal .tif): `upload_slide` / `upload_slide_from_url` (0.5.0+) start a
+  background analysis; `analyze_slide` waits for it and `get_slide_analysis` reads it. Report the
+  slide-level nuclei per mm², median area in µm², size variation and enlarged nuclei, which tiles were
+  densest (their images are saved separately for a closer look), and the QuPath GeoJSON link. The tiles
+  are a sample of the tissue, not all of it: say so.
 - For a dataset of many images, `export_dataset(format, category=... or image_ids=[...])` (0.4.0+) gives
   one class list across all of them, so the merge script below is only needed for older servers.
 

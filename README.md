@@ -106,8 +106,21 @@ Every tool is marked read-only or destructive (`replace_annotations`, `remove_an
 ask before the destructive ones. The server also offers three prompts: **Analyse a histology slide**,
 **Outline objects in an image** and **Build a training dataset**.
 
-Images are slide regions or snapshots (PNG, JPEG, WebP, TIFF and others, up to 20 MB), not whole-slide
-files such as .svs or .ndpi: export a region from your slide viewer first.
+### Whole slides
+
+| Tool | What it does |
+|---|---|
+| `upload_slide(path, name?, category?, analyze?, max_tiles?)` | Upload a whole-slide file (.svs, .ndpi, pyramidal .tif/.tiff, up to 5 GB; streamed, never loaded into memory) and start its analysis. Local server only |
+| `upload_slide_from_url(url, ...)` | The same from an https URL, copied straight into storage |
+| `analyze_slide(image_id, max_tiles?, restart?, wait_seconds?)` | Background analysis: finds the tissue, samples up to 48 tiles (512 × 512 µm at 20x), and runs the quality check and StarDist nuclei on each. Waits up to `wait_seconds` and reports progress |
+| `get_slide_analysis(image_id)` | Status, or the results: nuclei per mm², median nuclear area in µm², size variation and enlarged nuclei across the slide, per-tile values and quality |
+
+After the analysis the slide's image in the library is its overview, with the analysed tiles marked (the
+three densest in red), so `view_image` and the web app show it. The three densest tiles are saved as
+images of their own, with their nuclei outlined, for a close look or further annotation. Every nucleus
+is in a QuPath GeoJSON in slide coordinates: open the slide in QuPath, then File > Import objects.
+Slides are read with tifffile (Aperio SVS including JPEG 2000, Hamamatsu NDPI, pyramidal TIFF and
+OME-TIFF), decoding only the tiles needed. Other images are up to 20 MB.
 
 There is deliberately no tool for deleting images.
 

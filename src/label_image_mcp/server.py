@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import hmac
+import re
 import json
 import os
 import uuid
@@ -16,7 +18,7 @@ from mcp.server.fastmcp import Context, FastMCP, Image
 from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field, model_validator
 
-from .client import LabelImageClient, load_secret
+from .client import ApiError, LabelImageClient, load_secret
 from .exporters import export_coco, export_dataset as build_dataset, export_qupath, export_yolo
 from .render import render
 
@@ -80,8 +82,8 @@ async def lifespan(_: FastMCP) -> AsyncIterator[LabelImageClient]:
         await client.aclose()
 
 
-INSTRUCTIONS = """Annotate images saved in Image Label, including H&E histopathology slides (regions or
-snapshots up to 20 MB, not whole-slide files).
+INSTRUCTIONS = """Annotate images saved in Image Label, including H&E histopathology: slide regions and
+snapshots (up to 20 MB), and whole-slide files (SVS, NDPI, pyramidal TIFF, up to 5 GB).
 
 - Look before you outline: view_image shows the image with a pixel grid, so boxes and points you give
   segment_objects are in the right place. After annotating, view_image(with_annotations=true) to check
@@ -91,6 +93,10 @@ snapshots up to 20 MB, not whole-slide files).
   when known, for sizes in square microns.
 - Other objects: warm_up("sam"), or "medsam" for medical images, then segment_objects with a rough box
   per object. Prefer it to drawing polygons yourself.
+- Whole slides: upload_slide (or upload_slide_from_url) starts a background analysis of sampled tissue
+  tiles; analyze_slide waits for it (or restarts it), get_slide_analysis reads the results. The slide's
+  image is then its overview with the analysed tiles marked, the densest tiles are saved as images of
+  their own (annotate or view them in detail), and all nuclei are in a QuPath GeoJSON in slide coordinates.
 - Training data: export_annotations for one image, export_dataset for a category or a list of images
   (one class list, so class ids match across images).
 - Annotations are drafts for a person to review. replace_annotations and remove_annotations delete work:
@@ -111,7 +117,11 @@ def _client(ctx: Context) -> LabelImageClient:
 
 def _summary(image: dict[str, Any]) -> dict[str, Any]:
     keys = ("imageId", "filename", "name", "category", "subCategory", "description", "width", "height", "updatedAt")
-    return {k: image.get(k) for k in keys} | {"annotationCount": len(image.get("annotations") or [])}
+    summary = {k: image.get(k) for k in keys} | {"annotationCount": len(image.get("annotations") or [])}
+    if image.get("kind") == "slide":
+        analysis = image.get("slideAnalysis") or {}
+        summary |= {"kind": "slide", "analysis": analysis.get("status", "not started")}
+    return summary
 
 
 @mcp.tool(title="List images", annotations=READ)
@@ -167,7 +177,11 @@ async def view_image(
     those coordinates), and with with_annotations=true afterwards to check the outlines. region zooms into
     part of a large image (x, y, width, height in image pixels), e.g. to see individual nuclei.
     """
-    image, content = await _client(ctx).fetch_image(image_id)
+    client = _client(ctx)
+    record = await client.get_image(image_id)
+    if record.get("kind") == "slide" and not record.get("thumbnailKey"):
+        raise ValueError("This whole slide has no overview yet: analyze_slide makes one")
+    image, content = await client.fetch_image(image_id, record)
     annotations = (image.get("annotations") or []) if with_annotations else []
     if region:
         annotations = [a for a in annotations if _overlaps(a, region)]
@@ -455,6 +469,109 @@ async def warm_up(ctx: Context, model: Literal["sam", "medsam", "nuclei"] = "sam
     return await client.warm_segmenter(model)
 
 
+SLIDE_POLL_SECONDS = 5
+
+
+def _slide_report(image: dict[str, Any]) -> dict[str, Any]:
+    analysis = image.get("slideAnalysis") or {"status": "not started"}
+    report: dict[str, Any] = {"imageId": image.get("imageId"), "name": image.get("name") or image.get("filename"), **analysis}
+    if analysis.get("status") == "done":
+        report["slide"] = image.get("slide")
+        report["overview"] = {"width": image.get("width"), "height": image.get("height"),
+                              "note": "view_image shows the overview with the analysed tiles; densest tiles are red"}
+        report["nuclei_geojson_url"] = image.get("nucleiUrl")
+    if image.get("slideUrl"):
+        report["slide_url"] = image["slideUrl"]
+    return report
+
+
+@mcp.tool(title="Analyse a whole slide", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False))
+async def analyze_slide(
+    ctx: Context,
+    image_id: str,
+    max_tiles: Annotated[int, Field(ge=1, le=48)] = 16,
+    restart: bool = False,
+    wait_seconds: Annotated[int, Field(ge=0, le=240)] = 50,
+) -> dict[str, Any]:
+    """Analyse a whole-slide image in the background and wait up to wait_seconds for the result.
+
+    Finds the tissue, samples up to max_tiles tiles of it (512 x 512 um each at 20x) and runs the quality
+    check and StarDist nuclei on each: nuclei per mm2, nuclear size in um2, size variation and enlarged nuclei
+    across the slide, plus per-tile values. Takes about 10 seconds per tile, plus a minute when the model
+    starts. If it's still running when the wait ends, call get_slide_analysis later. An analysis already
+    running is waited for; restart=true starts a new one (e.g. with more tiles).
+    """
+    client = _client(ctx)
+    image = await client.get_image(image_id)
+    status = (image.get("slideAnalysis") or {}).get("status")
+    if restart or status not in ("queued", "running", "done"):
+        try:
+            await client.start_slide_analysis(image_id, max_tiles)
+        except ApiError as exc:
+            if exc.status != 409:  # 409: already running, so wait for it
+                raise
+    elif status == "done":
+        return _slide_report(image)
+    waited = 0
+    while waited < wait_seconds:
+        await asyncio.sleep(min(SLIDE_POLL_SECONDS, wait_seconds - waited))
+        waited += SLIDE_POLL_SECONDS
+        image = await client.get_image(image_id)
+        analysis = image.get("slideAnalysis") or {}
+        if analysis.get("status") in ("done", "failed"):
+            break
+        step = analysis.get("step", "")
+        if m := re.search(r"tile (\d+) of (\d+)", step):
+            await ctx.report_progress(int(m.group(1)), int(m.group(2)), step)
+    return _slide_report(image)
+
+
+@mcp.tool(title="Get a slide's analysis", annotations=READ)
+async def get_slide_analysis(ctx: Context, image_id: str) -> dict[str, Any]:
+    """A whole slide's analysis: its status (queued, running with the current step, done or failed), and when done
+    the slide-level summary, each analysed tile (position, nuclei per mm2, enlarged nuclei, quality), the images
+    made from the densest tiles, and a link to every nucleus as QuPath GeoJSON."""
+    return _slide_report(await _client(ctx).get_image(image_id))
+
+
+@mcp.tool(title="Upload a whole slide", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=False))
+async def upload_slide(
+    ctx: Context,
+    path: str,
+    name: str | None = None,
+    category: str | None = None,
+    analyze: bool = True,
+    max_tiles: Annotated[int, Field(ge=1, le=48)] = 16,
+) -> dict[str, Any]:
+    """Upload a whole-slide file (.svs, .ndpi, pyramidal .tif/.tiff, up to 5 GB) from the machine running this
+    server, and start its analysis in the background (see analyze_slide)."""
+    fields = {k: v for k, v in {"name": name, "category": category}.items() if v}
+    client = _client(ctx)
+    image = await client.upload_slide(path, **fields)
+    if analyze:
+        await client.start_slide_analysis(image["imageId"], max_tiles)
+    return _summary(image) | {"analysis": "started" if analyze else "not started"}
+
+
+@mcp.tool(title="Upload a whole slide from a URL", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True))
+async def upload_slide_from_url(
+    ctx: Context,
+    url: str,
+    name: str | None = None,
+    category: str | None = None,
+    analyze: bool = True,
+    max_tiles: Annotated[int, Field(ge=1, le=48)] = 16,
+) -> dict[str, Any]:
+    """Copy a whole-slide file (.svs, .ndpi, pyramidal .tif/.tiff, up to 5 GB) from an https URL into Image Label,
+    and start its analysis in the background (see analyze_slide)."""
+    fields = {k: v for k, v in {"name": name, "category": category}.items() if v}
+    client = _client(ctx)
+    image = await client.upload_slide_from_url(url, **fields)
+    if analyze:
+        await client.start_slide_analysis(image["imageId"], max_tiles)
+    return _summary(image) | {"analysis": "started" if analyze else "not started"}
+
+
 @mcp.tool(title="Export annotations", annotations=READ)
 async def export_annotations(
     ctx: Context, image_id: str, format: Literal["coco", "yolo", "qupath"] = "coco"
@@ -462,9 +579,35 @@ async def export_annotations(
     """Export an image's annotations: COCO JSON or YOLO (polygons and circles, as the web app exports), or
     QuPath GeoJSON (File > Import objects in QuPath; nuclei found by StarDist come in as detections)."""
     image = await _client(ctx).get_image(image_id)
+    if image.get("kind") == "slide" and (image.get("slide") or {}).get("thumbnailScale"):
+        return _slide_export(image, format)
     if format == "qupath":
         return export_qupath(image)
     return export_coco(image) if format == "coco" else export_yolo(image)
+
+
+def _slide_export(image: dict[str, Any], format: str) -> dict[str, Any]:
+    """A whole slide's own annotations are drawn on its overview: QuPath gets them in slide coordinates (with the
+    link to every nucleus), COCO and YOLO describe the overview image."""
+    if format != "qupath":
+        return (export_coco(image) if format == "coco" else export_yolo(image)) | {
+            "note": "These annotations are on the slide's overview image; for nuclei use format qupath or the densest-tile images"
+        }
+    factor = 1 / float(image["slide"]["thumbnailScale"])
+    scaled = []
+    for a in image.get("annotations") or []:
+        b = dict(a)
+        for k in ("x", "y", "width", "height", "radius"):
+            if b.get(k) is not None:
+                b[k] = round(float(b[k]) * factor, 1)
+        if b.get("points"):
+            b["points"] = [{"x": round(float(p["x"]) * factor, 1), "y": round(float(p["y"]) * factor, 1)} for p in b["points"]]
+        scaled.append(b)
+    return export_qupath({**image, "annotations": scaled}) | {
+        "nuclei_geojson_url": image.get("nucleiUrl"),
+        "note": "Regions are in slide (level 0) coordinates. Every detected nucleus is in the GeoJSON at nuclei_geojson_url "
+        "(link valid 24 h): in QuPath open the slide, then File > Import objects for each file.",
+    }
 
 
 MAX_DATASET_IMAGES = 100
@@ -534,10 +677,13 @@ async def export_dataset(
 
 @mcp.prompt(title="Analyse a histology slide")
 def analyse_slide(image: str, microns_per_pixel: str = "") -> str:
-    """Quality check, nuclei and a look at the result, for one H&E image (an image id or an https URL)."""
+    """Quality check, nuclei and a look at the result, for one H&E image or whole slide (an id, a URL or a path)."""
     mpp = f" with microns_per_pixel={microns_per_pixel}" if microns_per_pixel else ""
     return (
         f"Analyse this H&E histology image: {image}\n"
+        "If it is a whole-slide file (.svs, .ndpi, pyramidal .tif): upload it with upload_slide or "
+        "upload_slide_from_url, wait with analyze_slide, then view_image the overview, summarise the slide-level "
+        "and per-tile results, and offer the densest-tile images and the QuPath GeoJSON. Otherwise:\n"
         "1. If it is a URL, upload it with upload_image_from_url. Call warm_up('nuclei') straight away.\n"
         "2. check_image_quality, and tell me about any warnings before going on.\n"
         f"3. detect_nuclei{mpp}.\n"
@@ -617,6 +763,7 @@ def configure_hosted() -> None:
     global HOSTED
     HOSTED = True
     mcp.remove_tool("upload_image")
+    mcp.remove_tool("upload_slide")
 
 
 def main() -> None:

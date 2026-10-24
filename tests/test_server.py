@@ -399,12 +399,12 @@ async def test_tools_say_what_they_change():
 
 async def test_hosted_server_has_no_local_file_tools(monkeypatch):
     monkeypatch.setattr(server, "HOSTED", False)
-    tool = server.mcp._tool_manager.get_tool("upload_image")
+    tools = {name: server.mcp._tool_manager.get_tool(name) for name in ("upload_image", "upload_slide")}
     try:
         server.configure_hosted()
-        assert "upload_image" not in {t.name for t in await server.mcp.list_tools()}
+        assert not set(tools) & {t.name for t in await server.mcp.list_tools()}
     finally:
-        server.mcp._tool_manager._tools["upload_image"] = tool  # restore for the other tests
+        server.mcp._tool_manager._tools.update(tools)  # restore for the other tests
 
 
 async def test_prompts_are_offered():
@@ -412,3 +412,58 @@ async def test_prompts_are_offered():
     assert prompts == {"analyse_slide", "outline_objects", "build_training_dataset"}
     result = await server.mcp.get_prompt("analyse_slide", {"image": "img-1", "microns_per_pixel": "0.25"})
     assert "detect_nuclei with microns_per_pixel=0.25" in result.messages[0].content.text
+
+
+SLIDE = {**IMAGE, "imageId": "s-1", "filename": "case.svs", "kind": "slide", "width": 2000, "height": 1500,
+         "thumbnailKey": "images/s-1/thumbnail.jpg", "nucleiUrl": "https://s3.test/nuclei.geojson", "slideUrl": "https://s3.test/case.svs",
+         "slide": {"width": 46000, "height": 34500, "mpp": 0.5, "thumbnailScale": 0.0434783},
+         "annotations": [{"id": "t1", "type": "rectangle", "label": "densest tile", "x": 100, "y": 50, "width": 44.5, "height": 44.5, "color": "#ff1744"}]}
+
+
+async def test_upload_slide_streams_the_file_and_starts_the_analysis(api, tmp_path):
+    path = tmp_path / "case.svs"
+    path.write_bytes(b"x" * 3000)
+    api.post(f"{API}/images/upload-url").mock(return_value=ok({"imageId": "s-1", "uploadUrl": "https://s3.test/put"}))
+    put = api.put("https://s3.test/put").mock(return_value=httpx.Response(200))
+    confirm = api.post(f"{API}/images/s-1/confirm").mock(return_value=ok({**SLIDE, "slideAnalysis": None}))
+    start = api.post(f"{API}/images/s-1/pathology").mock(return_value=ok({"slideAnalysis": {"status": "queued"}}))
+    result = await call("upload_slide", {"path": str(path), "category": "Histopathology", "max_tiles": 8})
+    assert put.calls.last.request.headers["content-length"] == "3000"
+    sent = json.loads(confirm.calls.last.request.content)
+    assert sent["kind"] == "slide" and sent["fileSize"] == 3000 and sent["category"] == "Histopathology"
+    assert json.loads(start.calls.last.request.content) == {"action": "slide", "max_tiles": 8}
+    assert result["kind"] == "slide" and result["analysis"] == "started"
+    photo = tmp_path / "cat.png"
+    photo.write_bytes(b"x")
+    refused = await call_raw("upload_slide", {"path": str(photo)})
+    assert refused.isError and "Not a whole-slide file" in refused.content[0].text
+
+
+async def test_analyze_slide_waits_for_the_background_run(api, monkeypatch):
+    monkeypatch.setattr(server, "SLIDE_POLL_SECONDS", 0.01)
+    running = {**SLIDE, "slideAnalysis": {"status": "running", "step": "analysing tile 3 of 8", "startedAt": "t"}}
+    done = {**SLIDE, "slideAnalysis": {"status": "done", "summary": {"nuclei": 4200, "per_mm2": 1050.0}, "tileImages": [{"imageId": "t-1"}]}}
+    api.get(f"{API}/images/s-1").side_effect = [ok({**SLIDE, "slideAnalysis": None}), ok(running), ok(done)]
+    start = api.post(f"{API}/images/s-1/pathology").mock(return_value=ok({}))
+    result = await call("analyze_slide", {"image_id": "s-1", "wait_seconds": 5})
+    assert start.called and result["status"] == "done" and result["summary"]["per_mm2"] == 1050.0
+    assert result["nuclei_geojson_url"] == "https://s3.test/nuclei.geojson" and result["tileImages"] == [{"imageId": "t-1"}]
+
+    # already running elsewhere (409): it waits instead of failing
+    api.get(f"{API}/images/s-1").side_effect = None
+    api.get(f"{API}/images/s-1").mock(return_value=ok(running))
+    start.mock(return_value=httpx.Response(409, json={"success": False, "error": "already being analysed"}))
+    result = await call("analyze_slide", {"image_id": "s-1", "restart": True, "wait_seconds": 0})
+    assert result["status"] == "running" and result["step"] == "analysing tile 3 of 8"
+
+
+async def test_slide_exports_and_views(api):
+    api.get(f"{API}/images/s-1").mock(return_value=ok(SLIDE))
+    geo = await call("export_annotations", {"image_id": "s-1", "format": "qupath"})
+    ring = geo["features"][0]["geometry"]["coordinates"][0]
+    assert ring[0] == [2300.0, 1150.0] and geo["nuclei_geojson_url"] == "https://s3.test/nuclei.geojson"  # overview px / 0.0435
+    coco = await call("export_annotations", {"image_id": "s-1", "format": "coco"})
+    assert "overview image" in coco["note"]
+    api.get(f"{API}/images/s-2").mock(return_value=ok({**SLIDE, "imageId": "s-2", "thumbnailKey": None}))
+    blocked = await call_raw("view_image", {"image_id": "s-2"})
+    assert blocked.isError and "no overview yet" in blocked.content[0].text

@@ -18,6 +18,9 @@ from PIL import Image
 
 DEFAULT_API_URL = "https://labels.sachin-kale.com/api"
 MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024
+MAX_SLIDE_BYTES = 5 * 1024**3  # one S3 upload
+SLIDE_EXTENSIONS = (".svs", ".ndpi", ".tif", ".tiff", ".scn", ".bif")
+CHUNK = 8 * 1024 * 1024
 IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif", "image/bmp", "image/tiff"}
 
 
@@ -145,9 +148,9 @@ class LabelImageClient:
                 await asyncio.sleep(retry_delay)
         raise AssertionError("unreachable")
 
-    async def fetch_image(self, image_id: str) -> tuple[dict[str, Any], bytes]:
-        """An image's record and its file, from the record's signed download URL."""
-        image = await self.get_image(image_id)
+    async def fetch_image(self, image_id: str, image: dict[str, Any] | None = None) -> tuple[dict[str, Any], bytes]:
+        """An image's record (read unless given) and its file, from the record's signed URL."""
+        image = image or await self.get_image(image_id)
         url = image.get("downloadUrl") or image.get("url")
         if not url:
             raise ApiError(f"Image {image_id} has no download URL")
@@ -155,6 +158,58 @@ class LabelImageClient:
         if resp.status_code != 200:
             raise ApiError(f"Downloading image {image_id} failed (HTTP {resp.status_code})")
         return image, resp.content
+
+    async def _upload_stream(self, chunks: Any, size: int, filename: str, fields: dict[str, Any]) -> dict[str, Any]:
+        """Presigned upload of a file of known size, streamed in chunks, then confirmed as a whole slide."""
+        if size > MAX_SLIDE_BYTES:
+            raise ApiError(f"Slides larger than {MAX_SLIDE_BYTES // 1024**3} GB are not accepted")
+        content_type = "application/octet-stream"
+        upload = await self._request("POST", "/images/upload-url", json={"filename": filename, "contentType": content_type})
+        put = await self._s3.put(
+            upload["uploadUrl"], content=chunks, headers={"Content-Type": content_type, "Content-Length": str(size)},
+            timeout=httpx.Timeout(60.0, write=600.0),
+        )
+        if put.status_code >= 400:
+            raise ApiError(f"S3 upload failed (HTTP {put.status_code})")
+        return await self._request(
+            "POST", f"/images/{upload['imageId']}/confirm",
+            json={"width": 0, "height": 0, "filename": filename, "fileSize": size, "contentType": content_type, "kind": "slide", **fields},
+        )
+
+    async def upload_slide(self, path: str | Path, **fields: str) -> dict[str, Any]:
+        """Upload a whole-slide file (SVS, NDPI, pyramidal TIFF) without reading it into memory."""
+        file_path = Path(path).expanduser()
+        if file_path.suffix.lower() not in SLIDE_EXTENSIONS:
+            raise ApiError(f"Not a whole-slide file: expected one of {', '.join(SLIDE_EXTENSIONS)}")
+
+        async def chunks():
+            with file_path.open("rb") as f:
+                while chunk := f.read(CHUNK):
+                    yield chunk
+
+        return await self._upload_stream(chunks(), file_path.stat().st_size, file_path.name, fields)
+
+    async def upload_slide_from_url(self, url: str, **fields: str) -> dict[str, Any]:
+        """Copy a whole-slide file from an https URL straight into storage, without keeping it locally."""
+        parsed = urlparse(url)
+        name = Path(parsed.path).name
+        if not name.lower().endswith(SLIDE_EXTENSIONS):
+            raise ApiError(f"Not a whole-slide file: expected one of {', '.join(SLIDE_EXTENSIONS)}")
+        allowed = [h.strip().lower() for h in os.environ.get("LABEL_UPLOAD_URL_HOSTS", "").split(",") if h.strip()]
+        if allowed and (parsed.hostname or "").lower() not in allowed:
+            raise ApiError(f"Downloads are only allowed from: {', '.join(allowed)}")
+        if parsed.scheme != "https" and not (allowed and parsed.scheme == "http"):
+            raise ApiError("Slide URLs must use https")
+        async with self._s3.stream("GET", url, follow_redirects=False, timeout=httpx.Timeout(60.0, read=600.0)) as resp:
+            if resp.status_code != 200:
+                raise ApiError(f"Downloading the slide failed (HTTP {resp.status_code})")
+            size = int(resp.headers.get("content-length") or 0)
+            if not size:
+                raise ApiError("The server didn't say how large the slide is; download it and use upload_slide")
+            return await self._upload_stream(resp.aiter_bytes(CHUNK), size, name, fields)
+
+    async def start_slide_analysis(self, image_id: str, max_tiles: int) -> dict[str, Any]:
+        return await self._request("POST", f"/images/{image_id}/pathology", json={"action": "slide", "max_tiles": max_tiles})
 
     async def save_annotations(self, image_id: str, annotations: list[dict[str, Any]]) -> dict[str, Any]:
         return await self._request("PUT", f"/images/{image_id}/annotations", json={"annotations": annotations})
