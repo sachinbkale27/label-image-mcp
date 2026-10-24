@@ -8,6 +8,9 @@ assistants upload images, outline every nucleus in an H&E slide automatically (S
 from rough boxes (Segment Anything, or MedSAM for medical images), check slide quality, normalize stain
 colours, clean up annotations, and export COCO, YOLO or QuPath GeoJSON. A LangGraph agent is included.
 
+**Try it in the browser:** [https://agent.sachin-kale.com/#annotate](https://agent.sachin-kale.com/#annotate): upload a slide and annotate it, detect nuclei, check
+its quality or get an AI interpretation, with no setup.
+
 Published as `label-image-mcp` (PyPI) and `io.github.sachinbkale27/label-image-mcp` (MCP Registry).
 
 Use cases and setup guide: https://labels.sachin-kale.com/mcp
