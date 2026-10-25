@@ -115,7 +115,9 @@ ADD = ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=F
 DELETE = ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=False)
 
 
-VIEWER_HEADERS = ("x-viewer-visitor", "x-viewer-country", "x-viewer-region", "x-viewer-city", "x-viewer-time-zone")
+VIEWER_HEADERS = (
+    "x-viewer-visitor", "x-viewer-country", "x-viewer-region", "x-viewer-city", "x-viewer-time-zone", "x-viewer-internal",
+)
 
 
 def _client(ctx: Context) -> LabelImageClient:
