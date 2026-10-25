@@ -485,7 +485,8 @@ async def classify_cells(
 
     Runs HoVer-Net (PanNuke weights, CC BY-NC-SA 4.0: research and education only) in the background, about 30
     to 90 seconds per image: each nucleus annotation is relabelled with its type, and the result has counts,
-    percentages and the immune-to-tumour ratio. Run detect_nuclei first. If it's still running when the wait
+    percentages and the immune-to-tumour ratio. Run detect_nuclei first. Needs a 20x or 40x image: coarser
+    images are refused, because enlarging them can't add the detail the model reads. If it's still running when the wait
     ends, call it again (it waits for the same run).
     """
     client = _client(ctx)

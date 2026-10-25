@@ -9,7 +9,8 @@ and the change is listed here under **Changed** or **Removed**.
 ### Added
 - `classify_cells`: types detected nuclei as tumour, immune, connective tissue, dead or normal epithelial
   cells with HoVer-Net (PanNuke weights, CC BY-NC-SA 4.0: research and education only), in the background.
-  Nuclei are relabelled by type; the result has counts, percentages and the immune-to-tumour ratio.
+  Nuclei are relabelled by type; the result has counts, percentages and the immune-to-tumour ratio. Images
+  coarser than about 20x are refused: enlarging them can't add the detail the model reads.
 - Whole slides get cell types too (`analyze_slide(cell_types=True)`, the default): per tile and for the slide,
   in the densest-tile images and in the QuPath GeoJSON. With cell types on, `max_tiles` defaults to 12.
 
