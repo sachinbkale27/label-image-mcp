@@ -208,8 +208,12 @@ class LabelImageClient:
                 raise ApiError("The server didn't say how large the slide is; download it and use upload_slide")
             return await self._upload_stream(resp.aiter_bytes(CHUNK), size, name, fields)
 
-    async def start_slide_analysis(self, image_id: str, max_tiles: int | None = None, cell_types: bool = True) -> dict[str, Any]:
-        body: dict[str, Any] = {"action": "slide", "cell_types": cell_types}
+    async def start_slide_analysis(
+        self, image_id: str, max_tiles: int | None = None, cell_types: bool | None = None, coverage: str = "sample"
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {"action": "slide", "coverage": coverage}
+        if cell_types is not None:
+            body["cell_types"] = cell_types
         if max_tiles:
             body["max_tiles"] = max_tiles
         return await self._request("POST", f"/images/{image_id}/pathology", json=body)

@@ -159,11 +159,12 @@ ask before the destructive ones. The server also offers three prompts: **Analyse
 |---|---|
 | `upload_slide(path, name?, category?, analyze?, max_tiles?)` | Upload a whole-slide file (.svs, .ndpi, pyramidal .tif/.tiff, up to 5 GB; streamed, never loaded into memory) and start its analysis. Local server only |
 | `upload_slide_from_url(url, ...)` | The same from an https URL, copied straight into storage |
-| `analyze_slide(image_id, max_tiles?, cell_types?, restart?, wait_seconds?)` | Background analysis: finds the tissue, samples up to 48 tiles (256 × 256 µm at 40x), and runs the quality check, StarDist nuclei and (by default) cell types on each. Waits up to `wait_seconds` and reports progress |
+| `analyze_slide(image_id, coverage?, max_tiles?, cell_types?, restart?, wait_seconds?)` | Background analysis: finds the tissue, then runs the quality check, StarDist nuclei and cell types on tiles of 256 × 256 µm at 40x. `coverage: "sample"` (default) takes up to 48 tiles spread over the tissue, with cell types; `"full"` analyses **every tissue tile** (up to 3,000, about 200 mm²) in parallel and tints the overview as a nuclei-density heatmap (cell types opt-in there: about 15× slower). Waits up to `wait_seconds` and reports progress |
 | `get_slide_analysis(image_id)` | Status, or the results: nuclei per mm², median nuclear area in µm², size variation, enlarged nuclei and cell-type percentages across the slide, per-tile values and quality |
 
 After the analysis the slide's image in the library is its overview, with the analysed tiles marked (the
-three densest in red), so `view_image` and the web app show it. The three densest tiles are saved as
+three densest in red; with full coverage, a density heatmap and the ten densest tiles), so `view_image` and
+the web app show it. The three densest tiles are saved as
 images of their own, with their nuclei outlined, for a close look or further annotation. Every nucleus
 is in a QuPath GeoJSON in slide coordinates: open the slide in QuPath, then File > Import objects.
 Slides are read with tifffile (Aperio SVS including JPEG 2000, Hamamatsu NDPI, pyramidal TIFF and

@@ -4,6 +4,13 @@ All notable changes to Histopathology Annotation MCP (`label-image-mcp`). Versio
 [semantic versioning](https://semver.org): until 1.0, a minor version (0.x.0) may change or remove tools,
 and the change is listed here under **Changed** or **Removed**.
 
+## 0.7.0 (2026-10-25)
+
+### Added
+- `analyze_slide(coverage="full")`: every tissue tile of a slide (up to 3,000), analysed by parallel workers,
+  with the overview tinted as a nuclei-density heatmap and the full per-tile table (`tiles_url`). Cell types
+  are opt-in for full coverage.
+
 ## 0.6.1 (2026-10-25)
 
 ### Changed

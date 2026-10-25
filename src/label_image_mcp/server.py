@@ -520,6 +520,8 @@ def _slide_report(image: dict[str, Any]) -> dict[str, Any]:
         report["overview"] = {"width": image.get("width"), "height": image.get("height"),
                               "note": "view_image shows the overview with the analysed tiles; densest tiles are red"}
         report["nuclei_geojson_url"] = image.get("nucleiUrl")
+        if image.get("tilesUrl"):
+            report["tiles_url"] = image["tilesUrl"]  # every analysed tile, as JSON (full coverage)
     if image.get("slideUrl"):
         report["slide_url"] = image["slideUrl"]
     return report
@@ -529,12 +531,18 @@ def _slide_report(image: dict[str, Any]) -> dict[str, Any]:
 async def analyze_slide(
     ctx: Context,
     image_id: str,
+    coverage: Literal["sample", "full"] = "sample",
     max_tiles: Annotated[int | None, Field(ge=1, le=48)] = None,
-    cell_types: bool = True,
+    cell_types: bool | None = None,
     restart: bool = False,
     wait_seconds: Annotated[int, Field(ge=0, le=240)] = 50,
 ) -> dict[str, Any]:
     """Analyse a whole-slide image in the background and wait up to wait_seconds for the result.
+
+    coverage "sample" (default) analyses up to max_tiles tiles spread over the tissue in a few minutes.
+    "full" analyses every tissue tile (up to 3,000, about 200 mm2) in parallel parts and tints the overview as a
+    density heatmap: a few minutes for a biopsy, longer for big resections. Cell types are on by default for
+    a sample and off for full coverage (they take about 15x longer per tile); set cell_types to change that.
 
     Finds the tissue, samples up to max_tiles tiles of it (256 x 256 um each at 40x) and runs the quality
     check and StarDist nuclei on each: nuclei per mm2, nuclear size in um2, size variation and enlarged nuclei
@@ -549,7 +557,7 @@ async def analyze_slide(
     status = (image.get("slideAnalysis") or {}).get("status")
     if restart or status not in ("queued", "running", "done"):
         try:
-            await client.start_slide_analysis(image_id, max_tiles, cell_types)
+            await client.start_slide_analysis(image_id, max_tiles, cell_types, coverage)
         except ApiError as exc:
             if exc.status != 409:  # 409: already running, so wait for it
                 raise
@@ -564,7 +572,9 @@ async def analyze_slide(
         if analysis.get("status") in ("done", "failed"):
             break
         step = analysis.get("step", "")
-        if m := re.search(r"tile (\d+) of (\d+)", step):
+        if analysis.get("parts_total"):
+            await ctx.report_progress(int(analysis.get("parts_done") or 0), int(analysis["parts_total"]), "parts of the slide analysed")
+        elif m := re.search(r"tile (\d+) of (\d+)", step):
             await ctx.report_progress(int(m.group(1)), int(m.group(2)), step)
     return _slide_report(image)
 
@@ -585,7 +595,7 @@ async def upload_slide(
     category: str | None = None,
     analyze: bool = True,
     max_tiles: Annotated[int | None, Field(ge=1, le=48)] = None,
-    cell_types: bool = True,
+    cell_types: bool | None = None,
 ) -> dict[str, Any]:
     """Upload a whole-slide file (.svs, .ndpi, pyramidal .tif/.tiff, up to 5 GB) from the machine running this
     server, and start its analysis in the background (see analyze_slide)."""
@@ -605,7 +615,7 @@ async def upload_slide_from_url(
     category: str | None = None,
     analyze: bool = True,
     max_tiles: Annotated[int | None, Field(ge=1, le=48)] = None,
-    cell_types: bool = True,
+    cell_types: bool | None = None,
 ) -> dict[str, Any]:
     """Copy a whole-slide file (.svs, .ndpi, pyramidal .tif/.tiff, up to 5 GB) from an https URL into Image Label,
     and start its analysis in the background (see analyze_slide)."""

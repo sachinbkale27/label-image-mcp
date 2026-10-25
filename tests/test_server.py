@@ -432,7 +432,7 @@ async def test_upload_slide_streams_the_file_and_starts_the_analysis(api, tmp_pa
     assert put.calls.last.request.headers["content-length"] == "3000"
     sent = json.loads(confirm.calls.last.request.content)
     assert sent["kind"] == "slide" and sent["fileSize"] == 3000 and sent["category"] == "Histopathology"
-    assert json.loads(start.calls.last.request.content) == {"action": "slide", "max_tiles": 8, "cell_types": True}
+    assert json.loads(start.calls.last.request.content) == {"action": "slide", "coverage": "sample", "max_tiles": 8}
     assert result["kind"] == "slide" and result["analysis"] == "started"
     photo = tmp_path / "cat.png"
     photo.write_bytes(b"x")
