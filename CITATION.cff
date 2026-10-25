@@ -1,0 +1,49 @@
+cff-version: 1.2.0
+message: "If you use this software in your research, please cite it as below, and cite the models it runs (StarDist, Segment Anything, MedSAM)."
+title: "Histopathology Annotation MCP"
+abstract: "An MCP server for annotating histopathology and other images from AI assistants: StarDist nuclei, Segment Anything and MedSAM outlines, slide quality checks, stain normalization and whole-slide analysis, with COCO, YOLO and QuPath GeoJSON exports."
+type: software
+authors:
+  - family-names: Kale
+    given-names: Sachin
+version: 0.5.0
+date-released: 2026-10-24
+license: MIT
+repository-code: "https://github.com/sachinbkale27/label-image-mcp"
+url: "https://agent.sachin-kale.com/#annotate"
+keywords:
+  - histopathology
+  - digital pathology
+  - image annotation
+  - model context protocol
+  - nuclei segmentation
+references:
+  - type: article
+    title: "Cell Detection with Star-convex Polygons"
+    authors:
+      - family-names: Schmidt
+        given-names: Uwe
+      - family-names: Weigert
+        given-names: Martin
+      - family-names: Broaddus
+        given-names: Coleman
+      - family-names: Myers
+        given-names: Gene
+    year: 2018
+    collection-title: "Medical Image Computing and Computer Assisted Intervention (MICCAI)"
+  - type: article
+    title: "Segment Anything"
+    authors:
+      - family-names: Kirillov
+        given-names: Alexander
+      - name: "et al."
+    year: 2023
+    collection-title: "IEEE/CVF International Conference on Computer Vision (ICCV)"
+  - type: article
+    title: "Segment anything in medical images"
+    authors:
+      - family-names: Ma
+        given-names: Jun
+      - name: "et al."
+    year: 2024
+    journal: "Nature Communications"

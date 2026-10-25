@@ -332,9 +332,10 @@ def test_export_qupath_geojson():
 
 
 async def test_detect_nuclei_in_microns(api):
-    api.post(f"{API}/images/img-1/pathology").mock(return_value=ok(NUCLEI))
+    run = api.post(f"{API}/images/img-1/pathology").mock(return_value=ok(NUCLEI))
     save = api.put(f"{API}/images/img-1/annotations").mock(return_value=ok({"imageId": "img-1", "annotationCount": 5}))
     result = await call("detect_nuclei", {"image_id": "img-1", "microns_per_pixel": 0.5})
+    assert json.loads(run.calls.last.request.content)["microns_per_pixel"] == 0.5
     # 30 px x 0.25 um2/px; 2 nuclei in 200 x 100 px = 5,000 um2 = 0.005 mm2
     assert result["summary"]["median_area_um2"] == 7.5 and result["summary"]["per_mm2"] == 400.0
     assert "4.0 \u00b5m\u00b2" in json.loads(save.calls.last.request.content)["annotations"][3]["notes"]

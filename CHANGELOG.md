@@ -16,6 +16,13 @@ and the change is listed here under **Changed** or **Removed**.
   slide coordinates.
 - `export_annotations(format="qupath")` on a slide gives its regions in slide coordinates and the link to
   the nuclei GeoJSON.
+- A benchmark on NuInsSeg (benchmarks/nuinsseg.py) with results in the README; CITATION.cff.
+
+### Changed
+- `detect_nuclei` finds about two thirds more nuclei (F1 0.47 to 0.64 on held-out NuInsSeg images): a
+  detection threshold of 0.45 instead of StarDist's 0.69, and the image is resized so nuclei come out at
+  the size the model handles best (from `microns_per_pixel` when given, otherwise from the nuclei's own
+  size) instead of keeping whichever enlargement found most. It is also several times faster.
 
 ## 0.4.0 (2026-10-24)
 

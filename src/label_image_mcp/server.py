@@ -378,7 +378,7 @@ async def detect_nuclei(
     mark_enlarged: bool = True,
     replace_previous: bool = True,
     save: bool = True,
-    microns_per_pixel: Annotated[float | None, Field(gt=0.01, le=10)] = None,
+    microns_per_pixel: Annotated[float | None, Field(ge=0.05, le=2)] = None,
 ) -> dict[str, Any]:
     """Find and outline every cell nucleus in an H&E-stained histology image with StarDist, automatically.
 
@@ -387,12 +387,16 @@ async def detect_nuclei(
     varies (a rough measure of pleomorphism). With mark_enlarged, nuclei over 2.5x the median area are
     labelled "enlarged nucleus" (in red), the rest "nucleus". The most confident max_nuclei outlines are
     saved; replace_previous removes nuclei saved by an earlier run first. With microns_per_pixel (the
-    scanner's resolution: often 0.25 at 40x, 0.5 at 20x) sizes are also given in square microns and density
-    per square millimetre. The first run after a quiet spell takes up to a minute while the model starts
+    scanner's resolution: often 0.25 at 40x, 0.5 at 20x) the image is resized to the model's best resolution
+    and sizes are also given in square microns and density per square millimetre; without it, the image is
+    resized by the size of its nuclei. The first run after a quiet spell takes up to a minute while the model starts
     (warm_up("nuclei") avoids the wait).
     """
     client = _client(ctx)
-    found = await client.pathology(image_id, "nuclei", max_nuclei=max_nuclei)
+    params: dict[str, Any] = {"max_nuclei": max_nuclei}
+    if microns_per_pixel:
+        params["microns_per_pixel"] = microns_per_pixel  # the model then sees the image at its best resolution
+    found = await client.pathology(image_id, "nuclei", **params)
     new = []
     for nucleus in found["nuclei"]:
         enlarged = mark_enlarged and nucleus["enlarged"]

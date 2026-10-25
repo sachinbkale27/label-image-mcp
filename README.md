@@ -4,6 +4,15 @@
 
 **Image Annotation, including Histopathology slides; From H&E slide to training data in one conversation: nuclei, outlines and slide QC, exported to QuPath, COCO or YOLO. No GPU needed.**
 
+[![PyPI](https://img.shields.io/pypi/v/label-image-mcp)](https://pypi.org/project/label-image-mcp/)
+[![CI](https://github.com/sachinbkale27/label-image-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/sachinbkale27/label-image-mcp/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.sachinbkale27%2Flabel--image--mcp-6f42c1)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.sachinbkale27/label-image-mcp)
+
+![Loading an H&E image and detecting every nucleus in the browser version](https://raw.githubusercontent.com/sachinbkale27/label-image-mcp/main/docs/demo.gif)
+
+**Accuracy:** see [Benchmark](#benchmark). **Your data:** see [Your data](#your-data). **Changes:** see [CHANGELOG](CHANGELOG.md).
+
 An [MCP](https://modelcontextprotocol.io) server for annotating histopathology and other images in
 [Image Label](https://labels.sachin-kale.com), a free annotation tool. It lets Claude and other AI
 assistants upload images, outline every nucleus in an H&E slide automatically (StarDist), trace regions
@@ -59,6 +68,26 @@ claude mcp add label-image -e LABEL_USERNAME=... -e LABEL_PASSWORD=... -- uvx la
   }
 }
 ```
+
+## Benchmark
+
+`detect_nuclei` checked against expert outlines on [NuInsSeg](https://zenodo.org/records/10518968) (CC BY 4.0):
+H&E images of 31 human and mouse tissues, 30,698 hand-segmented nuclei. The detection threshold was chosen on
+the even-numbered images of each tissue; these results are on the other 332 images (15,701 nuclei), which were
+not used for any choice. A nucleus counts as found when its outline overlaps the expert's by IoU ≥ 0.5.
+
+| Settings | Precision | Recall | F1 | Panoptic quality | Pixel Dice |
+|---|---|---|---|---|---|
+| 0.5.0, resized by nucleus size (default) | 0.78 | 0.55 | **0.64** | 0.48 | 0.65 |
+| 0.5.0, with `microns_per_pixel` | 0.81 | 0.52 | **0.64** | 0.47 | 0.66 |
+| Before 0.5.0 | 0.81 | 0.33 | 0.47 | 0.35 | 0.43 |
+
+- Better on human tissue (F1 0.67) than mouse (0.50 to 0.53). Best on pancreas, cerebellum, placenta and
+  tongue (0.73 to 0.81); weakest on umbilical cord, brain, mouse heart and bone (0.13 to 0.34), where nuclei
+  are sparse, thin or faint. Per-tissue results are in [benchmarks/results](benchmarks/results).
+- The model is StarDist's pretrained H&E model, not trained on NuInsSeg: models trained on a dataset score
+  higher on it. Read these as what to expect on new images, and review outlines before training on them.
+- Reproduce: [benchmarks/nuinsseg.py](benchmarks/nuinsseg.py) runs the same method locally.
 
 ## Your data
 
