@@ -4,6 +4,12 @@ All notable changes to Histopathology Annotation MCP (`label-image-mcp`). Versio
 [semantic versioning](https://semver.org): until 1.0, a minor version (0.x.0) may change or remove tools,
 and the change is listed here under **Changed** or **Removed**.
 
+## 0.7.2 (2026-10-25)
+
+### Fixed
+- Usage counts on hosted servers: the version comes from pyproject.toml when the package isn't installed, and
+  the client from the HTTP caller when there is no MCP handshake (stateless mode).
+
 ## 0.7.1 (2026-10-25)
 
 ### Added

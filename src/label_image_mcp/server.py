@@ -114,11 +114,16 @@ DELETE = ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint
 
 def _client(ctx: Context) -> LabelImageClient:
     client = ctx.request_context.lifespan_context
+    name = ""
     try:
         info = ctx.session.client_params.clientInfo  # e.g. "claude-ai", "cursor-vscode"
-        client.client_name = re.sub(r"[^A-Za-z0-9._/-]", "", f"{info.name}/{info.version}")[:60] or "unknown"
+        name = f"{info.name}/{info.version}"
     except AttributeError:
-        pass
+        # A stateless (hosted) server never sees the handshake: name the HTTP client instead
+        request = getattr(ctx.request_context, "request", None)
+        agent = request.headers.get("user-agent", "") if request is not None and hasattr(request, "headers") else ""
+        name = agent.split(" ")[0] if agent else ""
+    client.client_name = re.sub(r"[^A-Za-z0-9._/-]", "", name)[:60] or "unknown"
     return client
 
 

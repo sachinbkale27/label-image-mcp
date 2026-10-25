@@ -25,7 +25,12 @@ def _version() -> str:
     try:
         return version("label-image-mcp")
     except PackageNotFoundError:
-        return "dev"
+        # Run from source (the hosted server): the version in pyproject.toml
+        import re
+
+        pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
+        match = re.search(r'^version = "([^"]+)"', pyproject.read_text(), re.M) if pyproject.exists() else None
+        return match.group(1) if match else "dev"
 
 
 VERSION = _version()
