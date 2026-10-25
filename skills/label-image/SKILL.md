@@ -1,28 +1,31 @@
 ---
 name: label-image
-description: Build image-annotation training datasets with the Image Label MCP server (label-image-mcp, labels.sachin-kale.com). Use when the user wants to upload images, add, fix or clean up annotations (polygons, circles, rectangles, pins, arrows), normalize labels, or export COCO JSON / YOLO training data from Image Label. Also use when the user mentions Image Label, labels.sachin-kale.com, or the list_images / add_annotations / export_annotations tools.
+description: Annotate images, including H&E histopathology slides, and turn them into training data with the Histopathology Annotation MCP server (label-image-mcp, Image Label at labels.sachin-kale.com). Use when the user wants to upload images or whole slides (SVS, NDPI, pyramidal TIFF), outline objects with Segment Anything / MedSAM, detect and measure nuclei (StarDist), type cells (HoVer-Net), check slide quality, normalize stain, fix or clean up annotations, share an annotated image, or export COCO JSON, YOLO or QuPath GeoJSON. Also use when the user mentions Image Label, labels.sachin-kale.com, or tools such as detect_nuclei, analyze_slide, segment_objects or export_annotations.
 license: MIT
 ---
 
-# Image Label datasets
+# Image annotation, including histopathology slides
 
-This skill drives the `label-image` MCP server, which manages images and annotations in
-[Image Label](https://labels.sachin-kale.com) and exports them as COCO JSON or YOLO.
+This skill drives the `label-image` MCP server (Histopathology Annotation MCP), which manages images
+and annotations in [Image Label](https://labels.sachin-kale.com), analyses H&E images and whole slides,
+and exports COCO JSON, YOLO or QuPath GeoJSON. Results are for research and education, not diagnosis.
 
 ## Before you start
 
-1. Check that the tools are available: `list_images`, `get_image`, `update_image_metadata`,
-   `add_annotations`, `replace_annotations`, `remove_annotations`, `upload_image`,
-   `upload_image_from_url`, `export_annotations` (and `segment_objects` on newer servers). If they are missing, tell the user to install the server
-   (credentials go in environment variables; never ask the user to paste a password into chat):
+1. Check that the tools are available (`list_images`, `get_image`, `upload_image`, `detect_nuclei`,
+   `segment_objects`, `export_annotations`, ...). If they are missing, tell the user to install the server:
    ```bash
-   claude mcp add label-image -e LABEL_USERNAME=... -e LABEL_PASSWORD=... -- uvx label-image-mcp
+   claude mcp add label-image -- uvx label-image-mcp
    ```
-   Other clients: https://github.com/sachinbkale27/label-image-mcp#install
-2. The tools need an account: they only see and change images saved to it, and without
-   credentials they see none. An `HTTP 401`/`403` error means missing or wrong credentials.
-   Don't retry; tell the user.
-3. Only images saved to the account are visible. Work kept only in the browser is not.
+   Other clients: https://github.com/sachinbkale27/label-image-mcp#install. No browser setup? The same
+   tools run at https://agent.sachin-kale.com/#annotate.
+2. **No account is needed.** Without credentials the server works as a guest: images kept 7 days (up to
+   50), 20 MB per image, 200 analyses a day, no whole slides. An account (`LABEL_USERNAME` /
+   `LABEL_PASSWORD` in environment variables; never ask the user to paste a password into chat) keeps
+   images 90 days and allows whole slides up to 5 GB. An `HTTP 401`/`403` usually means wrong
+   credentials or a guest limit: report the message, don't retry.
+3. The tools see only the images of the identity they use (guest or account), not work kept only in
+   the browser.
 
 ## Data model you must respect
 
@@ -86,11 +89,13 @@ result, and report the scores: an outline can be precise but of the wrong object
 - `normalize_stain(image_id)` saves a colour-standardised copy as a new image (report its new id); use it
   for pale or unusually coloured slides, or before comparing slides from different labs.
 - `export_annotations(image_id, "qupath")` gives GeoJSON for QuPath.
-- Whole slides (.svs, .ndpi, pyramidal .tif): `upload_slide` / `upload_slide_from_url` (0.5.0+) start a
-  background analysis; `analyze_slide` waits for it and `get_slide_analysis` reads it. Report the
-  slide-level nuclei per mm², median area in µm², size variation and enlarged nuclei, which tiles were
-  densest (their images are saved separately for a closer look), and the QuPath GeoJSON link. The tiles
-  are a sample of the tissue, not all of it: say so.
+- Whole slides (.svs, .ndpi, pyramidal .tif; account only): `upload_slide` / `upload_slide_from_url`
+  (0.5.0+) start a background analysis; `analyze_slide` waits for it and `get_slide_analysis` reads it.
+  `coverage: "sample"` (default) analyses a few dozen tiles spread over the tissue, with cell types;
+  `coverage: "full"` (0.7.0+) analyses every tissue tile in parallel and tints the overview as a density
+  heatmap. Report the slide-level nuclei per mm², median area in µm², size variation and enlarged nuclei,
+  which tiles were densest (their images are saved separately for a closer look), and the QuPath GeoJSON
+  link. For a sample, say the tiles are a sample of the tissue, not all of it.
 - For a dataset of many images, `export_dataset(format, category=... or image_ids=[...])` (0.4.0+) gives
   one class list across all of them, so the merge script below is only needed for older servers.
 
@@ -120,6 +125,11 @@ Use `add_annotations(image_id, [...])` for pins, arrows and shapes the user spec
      `confidence`). Anything you leave out is lost. Annotation ids and `createdAt` are
      regenerated; mention that if the user tracks ids.
 4. Call `get_image` again and report the before → after counts.
+
+### Share
+`share_image(image_id)` (0.7.3+) returns a 7-day link that opens the image with its annotations in the
+Image Label web app, where anyone can edit and export their own copy without an account. Anyone with the
+link can see that image: share it only with people who may.
 
 ### Export a dataset
 `export_annotations(image_id, format)` exports **one image**, and numbers classes by first
