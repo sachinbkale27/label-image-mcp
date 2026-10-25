@@ -4,6 +4,11 @@ All notable changes to Histopathology Annotation MCP (`label-image-mcp`). Versio
 [semantic versioning](https://semver.org): until 1.0, a minor version (0.x.0) may change or remove tools,
 and the change is listed here under **Changed** or **Removed**.
 
+## 0.6.1 (2026-10-25)
+
+### Changed
+- `classify_cells` explains that it needs a 20x or 40x image; coarser images are refused by the service.
+
 ## 0.6.0 (2026-10-25)
 
 ### Added

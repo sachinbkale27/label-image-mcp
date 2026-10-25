@@ -6,7 +6,7 @@ type: software
 authors:
   - family-names: Kale
     given-names: Sachin
-version: 0.6.0
+version: 0.6.1
 date-released: 2026-10-25
 license: MIT
 repository-code: "https://github.com/sachinbkale27/label-image-mcp"
