@@ -4,6 +4,12 @@ All notable changes to Histopathology Annotation MCP (`label-image-mcp`). Versio
 [semantic versioning](https://semver.org): until 1.0, a minor version (0.x.0) may change or remove tools,
 and the change is listed here under **Changed** or **Removed**.
 
+## 0.7.3 (2026-10-25)
+
+### Added
+- `share_image`: a 7-day link that opens the image and its annotations in the Image Label web app, in
+  anyone's browser, as their own copy to edit, save and export.
+
 ## 0.7.2 (2026-10-25)
 
 ### Fixed
