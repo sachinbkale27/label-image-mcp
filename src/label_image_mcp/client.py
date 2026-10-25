@@ -17,6 +17,18 @@ import httpx
 from PIL import Image
 
 DEFAULT_API_URL = "https://labels.sachin-kale.com/api"
+
+
+def _version() -> str:
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("label-image-mcp")
+    except PackageNotFoundError:
+        return "dev"
+
+
+VERSION = _version()
 MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024
 MAX_SLIDE_BYTES = 5 * 1024**3  # one S3 upload
 SLIDE_EXTENSIONS = (".svs", ".ndpi", ".tif", ".tiff", ".scn", ".bif")
@@ -51,6 +63,9 @@ class LabelImageClient:
         self.username = username if username is not None else os.environ.get("LABEL_USERNAME")
         self.password = password if password is not None else os.environ.get("LABEL_PASSWORD")
         self._token: str | None = None
+        # The AI client calling this server (from the MCP handshake), sent with each API call so usage can be
+        # counted by client and version; nothing else about the conversation is sent
+        self.client_name = "unknown"
         self._http = httpx.AsyncClient(base_url=self.base_url, timeout=35.0, transport=transport)  # the API itself gives up at 30 s
         # S3 presigned uploads go to a different host, so use a separate client
         self._s3 = httpx.AsyncClient(timeout=120.0, transport=transport)
@@ -82,13 +97,14 @@ class LabelImageClient:
     async def _request(self, method: str, path: str, *, auth: bool = True, **kwargs: Any) -> Any:
         if auth:
             await self._ensure_token()
-        headers = {"Authorization": f"Bearer {self._token}"} if auth and self._token else {}
+        agent = {"User-Agent": f"label-image-mcp/{VERSION} ({self.client_name})"}
+        headers = agent | ({"Authorization": f"Bearer {self._token}"} if auth and self._token else {})
         resp = await self._http.request(method, path, headers=headers, **kwargs)
         if resp.status_code == 401 and auth and self._token:
             # Sessions expire (12 hours): log in again once and retry.
             self._token = None
             await self._ensure_token()
-            headers = {"Authorization": f"Bearer {self._token}"} if self._token else {}
+            headers = agent | ({"Authorization": f"Bearer {self._token}"} if self._token else {})
             resp = await self._http.request(method, path, headers=headers, **kwargs)
         try:
             body = resp.json()

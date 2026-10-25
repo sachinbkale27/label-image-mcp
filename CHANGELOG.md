@@ -4,6 +4,13 @@ All notable changes to Histopathology Annotation MCP (`label-image-mcp`). Versio
 [semantic versioning](https://semver.org): until 1.0, a minor version (0.x.0) may change or remove tools,
 and the change is listed here under **Changed** or **Removed**.
 
+## 0.7.1 (2026-10-25)
+
+### Added
+- Each call to the service names the AI client and server version (`User-Agent: label-image-mcp/<version>
+  (<client>)`), so usage can be counted by client; nothing from the conversation is sent. See "Your data".
+- A JOSS paper draft (`paper/`).
+
 ## 0.7.0 (2026-10-25)
 
 ### Added

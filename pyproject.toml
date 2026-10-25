@@ -1,6 +1,6 @@
 [project]
 name = "label-image-mcp"
-version = "0.7.0"
+version = "0.7.1"
 description = "Image Annotation, including Histopathology slides; From H&E slide to training data in one conversation: nuclei, outlines and slide QC, exported to QuPath, COCO or YOLO. No GPU needed. Try it: https://agent.sachin-kale.com/#annotate"
 readme = "README.md"
 license = "MIT"
@@ -56,7 +56,7 @@ packages = ["src/label_image_mcp"]
 
 [tool.hatch.build.targets.sdist]
 # The README shows the demo from GitHub; the package doesn't need its own copy
-exclude = ["docs/*.gif"]
+exclude = ["docs/*.gif", "paper", "benchmarks/results"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

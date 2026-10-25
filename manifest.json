@@ -2,7 +2,7 @@
   "manifest_version": "0.4",
   "name": "label-image-mcp",
   "display_name": "Histopathology Annotation MCP",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Image Annotation, including Histopathology slides; From H&E slide to training data in one conversation: nuclei, outlines and slide QC, exported to QuPath, COCO or YOLO. No GPU needed.",
   "long_description": "Lets Claude list, upload and describe images saved in Image Label (labels.sachin-kale.com), add or clean up annotations, and export training data: COCO JSON, YOLO labels, YOLO classes or QuPath GeoJSON. Needs an Image Label account to upload or save annotations.",
   "author": {

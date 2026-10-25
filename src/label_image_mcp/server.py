@@ -113,7 +113,13 @@ DELETE = ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint
 
 
 def _client(ctx: Context) -> LabelImageClient:
-    return ctx.request_context.lifespan_context
+    client = ctx.request_context.lifespan_context
+    try:
+        info = ctx.session.client_params.clientInfo  # e.g. "claude-ai", "cursor-vscode"
+        client.client_name = re.sub(r"[^A-Za-z0-9._/-]", "", f"{info.name}/{info.version}")[:60] or "unknown"
+    except AttributeError:
+        pass
+    return client
 
 
 def _summary(image: dict[str, Any]) -> dict[str, Any]:

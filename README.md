@@ -103,6 +103,9 @@ What happens to images you upload through this server (hosted on AWS in us-east-
 - **Not used to train models**, and not sent to other AI services by this server: StarDist, Segment Anything
   and MedSAM run on the service itself. Your AI assistant sees what its tools return (`view_image` returns
   the picture), under that assistant's own terms.
+- **Usage counts.** Each call to the service names the AI client (for example `claude-ai/0.1.0`, from the MCP
+  handshake) and the server version, so usage can be counted by client; the account is logged only as a hash.
+  Nothing from your conversation is sent.
 - **No patient identifiers, please.** Remove names, record numbers and slide labels (crop the label area or
   use a de-identified copy) before uploading. Results are for research and education, not diagnosis.
 

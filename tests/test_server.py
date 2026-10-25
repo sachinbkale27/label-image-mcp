@@ -478,3 +478,11 @@ async def test_classify_cells_starts_and_waits(api, monkeypatch):
     result = await call("classify_cells", {"image_id": "img-1", "wait_seconds": 5})
     assert json.loads(start.calls.last.request.content) == {"action": "classify"}
     assert result["status"] == "done" and result["counts"]["tumour cell"] == 236
+
+
+async def test_api_calls_name_the_ai_client(api):
+    """The client and server versions go with each API call (counted in usage), nothing else."""
+    listing = api.get(f"{API}/images").mock(return_value=ok([IMAGE]))
+    await call("list_images", {})
+    agent = listing.calls.last.request.headers["user-agent"]
+    assert agent.startswith("label-image-mcp/") and "(mcp/" in agent  # the in-memory test client calls itself "mcp"
