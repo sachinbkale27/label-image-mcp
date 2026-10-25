@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.sachinbkale27%2Flabel--image--mcp-6f42c1)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.sachinbkale27/label-image-mcp)
 
-![Loading an H&E image and detecting every nucleus in the browser version](https://raw.githubusercontent.com/sachinbkale27/label-image-mcp/main/docs/demo.gif)
+![Loading an H&E breast cancer slide and outlining every nucleus with StarDist, in the browser version](https://raw.githubusercontent.com/sachinbkale27/label-image-mcp/main/docs/demo.gif)
 
 **Accuracy:** see [Benchmark](#benchmark). **Your data:** see [Your data](#your-data). **Changes:** see [CHANGELOG](CHANGELOG.md).
 
