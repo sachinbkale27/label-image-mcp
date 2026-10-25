@@ -71,6 +71,9 @@ class LabelImageClient:
         # The AI client calling this server (from the MCP handshake), sent with each API call so usage can be
         # counted by client and version; nothing else about the conversation is sent
         self.client_name = "unknown"
+        # On the hosted server only: where its caller's visitor is (x-viewer-* headers: city, country, time zone
+        # and a daily anonymous visitor id), passed on so usage counts that person, not the hosting server
+        self.viewer: dict[str, str] = {}
         self.guest: dict[str, Any] | None = None  # set when working as a guest (no account)
         self._http = httpx.AsyncClient(base_url=self.base_url, timeout=35.0, transport=transport)  # the API itself gives up at 30 s
         # S3 presigned uploads go to a different host, so use a separate client
@@ -143,7 +146,7 @@ class LabelImageClient:
     async def _request(self, method: str, path: str, *, auth: bool = True, **kwargs: Any) -> Any:
         if auth:
             await self._ensure_token()
-        agent = {"User-Agent": f"label-image-mcp/{VERSION} ({self.client_name})"}
+        agent = {"User-Agent": f"label-image-mcp/{VERSION} ({self.client_name})"} | self.viewer
         headers = agent | ({"Authorization": f"Bearer {self._token}"} if auth and self._token else {})
         resp = await self._http.request(method, path, headers=headers, **kwargs)
         if resp.status_code == 401 and auth and self._token:

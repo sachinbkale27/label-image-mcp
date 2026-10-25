@@ -486,6 +486,7 @@ async def test_api_calls_name_the_ai_client(api):
     await call("list_images", {})
     agent = listing.calls.last.request.headers["user-agent"]
     assert agent.startswith("label-image-mcp/") and "(mcp/" in agent  # the in-memory test client calls itself "mcp"
+    assert not any(h.startswith("x-viewer-") for h in listing.calls.last.request.headers)  # only the hosted server forwards these
 
 
 async def test_share_image_returns_a_link(api):

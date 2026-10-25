@@ -115,6 +115,9 @@ ADD = ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=F
 DELETE = ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=False)
 
 
+VIEWER_HEADERS = ("x-viewer-visitor", "x-viewer-country", "x-viewer-region", "x-viewer-city", "x-viewer-time-zone")
+
+
 def _client(ctx: Context) -> LabelImageClient:
     client = ctx.request_context.lifespan_context
     name = ""
@@ -127,6 +130,10 @@ def _client(ctx: Context) -> LabelImageClient:
         agent = request.headers.get("user-agent", "") if request is not None and hasattr(request, "headers") else ""
         name = agent.split(" ")[0] if agent else ""
     client.client_name = re.sub(r"[^A-Za-z0-9._/-]", "", name)[:60] or "unknown"
+    if HOSTED:
+        request = getattr(ctx.request_context, "request", None)
+        headers = request.headers if request is not None and hasattr(request, "headers") else {}
+        client.viewer = {k: v[:100] for k in VIEWER_HEADERS if (v := headers.get(k))}
     return client
 
 
