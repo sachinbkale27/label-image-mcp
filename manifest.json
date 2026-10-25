@@ -133,6 +133,10 @@
       "description": "Copy a whole-slide file from an https URL and start its analysis"
     },
     {
+      "name": "share_image",
+      "description": "A 7-day link that opens the image and its annotations in the Image Label web app, in anyone's browser"
+    },
+    {
       "name": "export_annotations",
       "description": "Export annotations as COCO JSON, YOLO or QuPath GeoJSON"
     },

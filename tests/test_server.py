@@ -486,3 +486,9 @@ async def test_api_calls_name_the_ai_client(api):
     await call("list_images", {})
     agent = listing.calls.last.request.headers["user-agent"]
     assert agent.startswith("label-image-mcp/") and "(mcp/" in agent  # the in-memory test client calls itself "mcp"
+
+
+async def test_share_image_returns_a_link(api):
+    share = api.post(f"{API}/images/img-1/share").mock(return_value=ok({"imageId": "img-1", "url": "https://labels.test/?shared=t0k", "expiresAt": "x"}))
+    result = await call("share_image", {"image_id": "img-1"})
+    assert share.called and result["url"].endswith("?shared=t0k")

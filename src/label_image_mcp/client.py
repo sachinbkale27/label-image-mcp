@@ -239,6 +239,9 @@ class LabelImageClient:
             body["max_tiles"] = max_tiles
         return await self._request("POST", f"/images/{image_id}/pathology", json=body)
 
+    async def share_image(self, image_id: str) -> dict[str, Any]:
+        return await self._request("POST", f"/images/{image_id}/share")
+
     async def start_classification(self, image_id: str) -> dict[str, Any]:
         return await self._request("POST", f"/images/{image_id}/pathology", json={"action": "classify"})
 

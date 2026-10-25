@@ -638,6 +638,17 @@ async def upload_slide_from_url(
     return _summary(image) | {"analysis": "started" if analyze else "not started"}
 
 
+@mcp.tool(title="Share an image link", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True))
+async def share_image(ctx: Context, image_id: str) -> dict[str, Any]:
+    """A link that opens the image, with its current annotations, in the Image Label web app in anyone's
+    browser: the app copies it into that person's own workspace to edit and export, with no account needed.
+
+    Anyone with the link can see this one image and its annotations for 7 days; share it only with people who
+    may see the image.
+    """
+    return await _client(ctx).share_image(image_id)
+
+
 @mcp.tool(title="Export annotations", annotations=READ)
 async def export_annotations(
     ctx: Context, image_id: str, format: Literal["coco", "yolo", "qupath"] = "coco"

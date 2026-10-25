@@ -149,6 +149,7 @@ mkdir -p ~/.claude/skills && cp -r /tmp/label-image-mcp/skills/label-image ~/.cl
 | `normalize_stain(image_id)` | Macenko stain normalization: a copy with standard H&E colours, saved as a new image |
 | `check_image_quality(image_id)` | HistoQC-style checks (tissue fraction, blur, marker pen, exposure, faint staining) with a verdict and warnings |
 | `warm_up(model?)` | Start loading a model without waiting: `sam`, `medsam` or `nuclei` (each takes a minute or two after a quiet spell) |
+| `share_image(image_id)` | A link (valid 7 days) that opens the image and its annotations in the Image Label web app in anyone's browser, copied into their own workspace to edit and export; no account needed |
 | `export_annotations(image_id, format)` | COCO JSON or YOLO, same output as the web app's export, or `qupath`: GeoJSON for QuPath's File > Import objects (StarDist nuclei come in as detections) |
 | `export_dataset(format?, category?, image_ids?, classes?, output_dir?)` | Many images (a category, or up to 100 ids) as ONE dataset with one class list: a COCO file, YOLO classes plus a label file per image, or a QuPath GeoJSON per image. `output_dir` writes the files (local server only) |
 
