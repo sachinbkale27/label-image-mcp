@@ -94,8 +94,7 @@ not used for any choice. A nucleus counts as found when its outline overlaps the
 What happens to images you upload through this server (hosted on AWS in us-east-1):
 
 - **Private to your account.** Only you can list, read or change your images; the storage bucket blocks all
-  public access, and viewing links are signed and expire after 24 hours. The service administrator can
-  access stored images, as with any hosted service.
+  public access, and viewing links are signed and expire after 24 hours.
 - **Deleted after 90 days**, automatically: files, slides, annotations and analysis results. Deleting an image
   removes it straight away.
 - **Encrypted at rest** (AES-256) and in transit (HTTPS).
