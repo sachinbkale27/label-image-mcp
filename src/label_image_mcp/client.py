@@ -71,6 +71,7 @@ class LabelImageClient:
         # The AI client calling this server (from the MCP handshake), sent with each API call so usage can be
         # counted by client and version; nothing else about the conversation is sent
         self.client_name = "unknown"
+        self.guest: dict[str, Any] | None = None  # set when working as a guest (no account)
         self._http = httpx.AsyncClient(base_url=self.base_url, timeout=35.0, transport=transport)  # the API itself gives up at 30 s
         # S3 presigned uploads go to a different host, so use a separate client
         self._s3 = httpx.AsyncClient(timeout=120.0, transport=transport)
@@ -87,17 +88,57 @@ class LabelImageClient:
             self.username, self.password = secret.get("username"), secret.get("password")
 
     async def _ensure_token(self) -> None:
-        # Without credentials, requests are anonymous and see no images: the API only
-        # returns, changes or accepts images for the logged-in account.
+        # With an account, log in. Without one, use a guest identity (no sign-up: limited, kept 7 days), saved
+        # locally so the same images are there next time. LABEL_GUEST=0 turns guests off.
         if self._token:
             return
         self._load_credentials()
-        if not (self.username and self.password):
+        if self.username and self.password:
+            data = await self._request(
+                "POST", "/admin/login", json={"username": self.username, "password": self.password}, auth=False
+            )
+            self._token = data["token"]
             return
-        data = await self._request(
-            "POST", "/admin/login", json={"username": self.username, "password": self.password}, auth=False
-        )
-        self._token = data["token"]
+        if self.guest_allowed():
+            self._token = await self._guest_token()
+
+    @staticmethod
+    def guest_allowed() -> bool:
+        hosted = bool(os.environ.get("LABEL_CREDENTIALS_SECRET"))
+        return not hosted and os.environ.get("LABEL_GUEST", "1").lower() not in ("0", "false", "no")
+
+    def _guest_file(self) -> Path:
+        base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+        return base / "label-image-mcp" / f"guest-{hashlib.sha256(self.base_url.encode()).hexdigest()[:8]}.json"
+
+    async def _guest_token(self, renew: bool = False) -> str | None:
+        """The saved guest token while it is valid (with a day to spare), otherwise a new guest."""
+        import time
+
+        path = self._guest_file()
+        if not renew and path.exists():
+            try:
+                saved = json.loads(path.read_text())
+                if saved.get("expires", 0) > time.time() + 86400:
+                    self.guest = saved
+                    return saved["token"]
+            except (OSError, ValueError, KeyError):
+                pass
+        try:
+            data = await self._request("POST", "/guest", auth=False)
+        except ApiError:
+            return None  # no guests (e.g. too many from this address today): anonymous
+        from datetime import datetime
+
+        expires = datetime.fromisoformat(data["expiresAt"].replace("Z", "+00:00")).timestamp()
+        self.guest = {"username": data["username"], "token": data["token"], "expires": expires, "limits": data.get("limits", {})}
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(self.guest))
+            path.chmod(0o600)  # the token is the guest's key to its images
+        except OSError:
+            pass
+        return data["token"]
 
     async def _request(self, method: str, path: str, *, auth: bool = True, **kwargs: Any) -> Any:
         if auth:
@@ -106,8 +147,10 @@ class LabelImageClient:
         headers = agent | ({"Authorization": f"Bearer {self._token}"} if auth and self._token else {})
         resp = await self._http.request(method, path, headers=headers, **kwargs)
         if resp.status_code == 401 and auth and self._token:
-            # Sessions expire (12 hours): log in again once and retry.
+            # Sessions expire (12 hours): log in again once and retry. A guest that is no longer valid starts over.
             self._token = None
+            if self.guest:
+                self._token = await self._guest_token(renew=True)
             await self._ensure_token()
             headers = agent | ({"Authorization": f"Bearer {self._token}"} if self._token else {})
             resp = await self._http.request(method, path, headers=headers, **kwargs)
@@ -289,9 +332,11 @@ class LabelImageClient:
             width, height = img.size
 
         upload = await self._request(
-            "POST", "/images/upload-url", json={"filename": filename, "contentType": content_type}
+            "POST", "/images/upload-url", json={"filename": filename, "contentType": content_type, "fileSize": len(content)}
         )
-        put = await self._s3.put(upload["uploadUrl"], content=content, headers={"Content-Type": content_type})
+        put = await self._s3.put(
+            upload["uploadUrl"], content=content, headers={"Content-Type": content_type, **upload.get("uploadHeaders", {})}
+        )
         if put.status_code >= 400:
             raise ApiError(f"S3 upload failed (HTTP {put.status_code})")
 

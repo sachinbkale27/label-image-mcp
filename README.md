@@ -37,17 +37,27 @@ LangGraph agent (label-image-agent)      Claude Desktop / Claude Code / any MCP 
                  Image Label API  (/api/images ...)
 ```
 
-## Account
+## Account (optional)
 
-The tools need an Image Label account ([request one](https://labels.sachin-kale.com/contact)).
-They see, change and upload only images saved to that account; without one they see no images.
-Work kept only in your browser is not visible to them.
+**No account needed to try it.** Without credentials the server works as a **guest**: it gets a guest
+identity on first use, saves it in `~/.config/label-image-mcp/`, and keeps using it, so your images are
+there next time.
+
+| | Guest (no sign-up) | Account ([request one, free](https://labels.sachin-kale.com/contact)) |
+|---|---|---|
+| Images kept | 7 days, up to 50 | 90 days |
+| Upload size | 20 MB per image | 20 MB per image; whole slides up to 5 GB |
+| Analyses (nuclei, outlines, cell types, …) | 200 a day | No daily cap |
+| Whole slides | No | Yes |
+
+The tools see, change and upload only the images of the identity they use (guest or account). Set
+`LABEL_USERNAME` and `LABEL_PASSWORD` to use an account, or `LABEL_GUEST=0` to turn guests off.
 
 ## Install
 
 **Claude Desktop:** download `label-image-mcp.mcpb` from the
-[latest release](https://github.com/sachinbkale27/label-image-mcp/releases/latest), open it, and
-enter your username and password when asked.
+[latest release](https://github.com/sachinbkale27/label-image-mcp/releases/latest) and open it. Leave
+username and password empty to start as a guest.
 
 **Claude Code:**
 

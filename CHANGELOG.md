@@ -4,6 +4,16 @@ All notable changes to Histopathology Annotation MCP (`label-image-mcp`). Versio
 [semantic versioning](https://semver.org): until 1.0, a minor version (0.x.0) may change or remove tools,
 and the change is listed here under **Changed** or **Removed**.
 
+## 0.8.0 (2026-10-25)
+
+### Added
+- **No account needed**: without credentials the server works as a guest, with an identity saved in
+  `~/.config/label-image-mcp/` and reused. Guests' images are kept 7 days (up to 50, 20 MB each), with up to
+  200 analyses a day and no whole slides. `LABEL_GUEST=0` turns guests off.
+
+### Changed
+- Uploads send their size, as guest uploads are signed for it.
+
 ## 0.7.3 (2026-10-25)
 
 ### Added

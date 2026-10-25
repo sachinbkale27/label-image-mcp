@@ -100,6 +100,9 @@ snapshots (up to 20 MB), and whole-slide files (SVS, NDPI, pyramidal TIFF, up to
   their own (annotate or view them in detail), and all nuclei are in a QuPath GeoJSON in slide coordinates.
 - Training data: export_annotations for one image, export_dataset for a category or a list of images
   (one class list, so class ids match across images).
+- Without an account the server works as a guest (no sign-up): images are kept 7 days (up to 50), up to 200
+  analyses a day, no whole slides. If a tool says a guest limit was reached, tell the user they can request
+  a free account at https://labels.sachin-kale.com/contact.
 - Annotations are drafts for a person to review. replace_annotations and remove_annotations delete work:
   use them only when asked."""
 

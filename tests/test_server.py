@@ -492,3 +492,39 @@ async def test_share_image_returns_a_link(api):
     share = api.post(f"{API}/images/img-1/share").mock(return_value=ok({"imageId": "img-1", "url": "https://labels.test/?shared=t0k", "expiresAt": "x"}))
     result = await call("share_image", {"image_id": "img-1"})
     assert share.called and result["url"].endswith("?shared=t0k")
+
+
+async def test_without_an_account_it_works_as_a_saved_guest(monkeypatch, tmp_path):
+    monkeypatch.setenv("LABEL_API_URL", API)
+    monkeypatch.delenv("LABEL_USERNAME", raising=False)
+    monkeypatch.delenv("LABEL_PASSWORD", raising=False)
+    monkeypatch.delenv("LABEL_CREDENTIALS_SECRET", raising=False)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    guest = {"username": "guest-abc", "token": "g-tok", "expiresAt": "2099-01-01T00:00:00Z", "limits": {"images": 50}}
+    with respx.mock(assert_all_called=False) as mock:
+        made = mock.post(f"{API}/guest").mock(return_value=ok(guest))
+        listing = mock.get(f"{API}/images").mock(return_value=ok([]))
+        client = LabelImageClient()
+        await client.list_images()
+        assert made.call_count == 1 and listing.calls.last.request.headers["authorization"] == "Bearer g-tok"
+        saved = next(tmp_path.glob("label-image-mcp/guest-*.json"))
+        assert json.loads(saved.read_text())["username"] == "guest-abc" and oct(saved.stat().st_mode)[-3:] == "600"
+        await client.aclose()
+
+        again = LabelImageClient()  # a new run reuses the saved guest
+        await again.list_images()
+        assert made.call_count == 1
+        await again.aclose()
+
+        # uploads say their size and send the headers the API signed (the guest retention tag)
+        url = mock.post(f"{API}/images/upload-url").mock(return_value=ok({"imageId": "i1", "uploadUrl": "https://s3.test/put", "uploadHeaders": {"x-amz-tagging": "retention=guest"}}))
+        put = mock.put("https://s3.test/put").mock(return_value=httpx.Response(200))
+        mock.post(f"{API}/images/i1/confirm").mock(return_value=ok({"imageId": "i1"}))
+        uploader = LabelImageClient()
+        await uploader.upload_bytes(_png(), "a.png", "image/png")
+        assert json.loads(url.calls.last.request.content)["fileSize"] == len(_png())
+        assert put.calls.last.request.headers["x-amz-tagging"] == "retention=guest"
+        await uploader.aclose()
+
+    monkeypatch.setenv("LABEL_GUEST", "0")
+    assert not LabelImageClient.guest_allowed()
