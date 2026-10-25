@@ -80,6 +80,9 @@ result, and report the scores: an outline can be precise but of the wrong object
   `median_area_um2` and `per_mm2`. Report the count,
   `median_area`, `area_variation` (higher means more variable nuclear size) and the number of enlarged
   nuclei. These are measurements, not a diagnosis. It works on H&E stains only.
+- `classify_cells(image_id)` (0.6.0+) after `detect_nuclei` types the nuclei (tumour, immune, connective
+  tissue, dead, normal epithelial) and gives percentages and the immune-to-tumour ratio. Say it is for
+  research and education only, and that types are model estimates, not a diagnosis.
 - `normalize_stain(image_id)` saves a colour-standardised copy as a new image (report its new id); use it
   for pale or unusually coloured slides, or before comparing slides from different labs.
 - `export_annotations(image_id, "qupath")` gives GeoJSON for QuPath.

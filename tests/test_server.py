@@ -432,7 +432,7 @@ async def test_upload_slide_streams_the_file_and_starts_the_analysis(api, tmp_pa
     assert put.calls.last.request.headers["content-length"] == "3000"
     sent = json.loads(confirm.calls.last.request.content)
     assert sent["kind"] == "slide" and sent["fileSize"] == 3000 and sent["category"] == "Histopathology"
-    assert json.loads(start.calls.last.request.content) == {"action": "slide", "max_tiles": 8}
+    assert json.loads(start.calls.last.request.content) == {"action": "slide", "max_tiles": 8, "cell_types": True}
     assert result["kind"] == "slide" and result["analysis"] == "started"
     photo = tmp_path / "cat.png"
     photo.write_bytes(b"x")
@@ -468,3 +468,13 @@ async def test_slide_exports_and_views(api):
     api.get(f"{API}/images/s-2").mock(return_value=ok({**SLIDE, "imageId": "s-2", "thumbnailKey": None}))
     blocked = await call_raw("view_image", {"image_id": "s-2"})
     assert blocked.isError and "no overview yet" in blocked.content[0].text
+
+
+async def test_classify_cells_starts_and_waits(api, monkeypatch):
+    monkeypatch.setattr(server, "SLIDE_POLL_SECONDS", 0.01)
+    done = {"status": "done", "counts": {"tumour cell": 236, "immune cell": 14}, "immune_to_tumour": 0.06, "note": "CC BY-NC-SA"}
+    api.get(f"{API}/images/img-1").side_effect = [ok(IMAGE), ok({**IMAGE, "cellTypes": {"status": "running"}}), ok({**IMAGE, "cellTypes": done})]
+    start = api.post(f"{API}/images/img-1/pathology").mock(return_value=ok({"cellTypes": {"status": "queued"}}))
+    result = await call("classify_cells", {"image_id": "img-1", "wait_seconds": 5})
+    assert json.loads(start.calls.last.request.content) == {"action": "classify"}
+    assert result["status"] == "done" and result["counts"]["tumour cell"] == 236

@@ -1,13 +1,13 @@
 cff-version: 1.2.0
-message: "If you use this software in your research, please cite it as below, and cite the models it runs (StarDist, Segment Anything, MedSAM)."
+message: "If you use this software in your research, please cite it as below, and cite the models it runs (StarDist, HoVer-Net, Segment Anything, MedSAM)."
 title: "Histopathology Annotation MCP"
 abstract: "An MCP server for annotating histopathology and other images from AI assistants: StarDist nuclei, Segment Anything and MedSAM outlines, slide quality checks, stain normalization and whole-slide analysis, with COCO, YOLO and QuPath GeoJSON exports."
 type: software
 authors:
   - family-names: Kale
     given-names: Sachin
-version: 0.5.0
-date-released: 2026-10-24
+version: 0.6.0
+date-released: 2026-10-25
 license: MIT
 repository-code: "https://github.com/sachinbkale27/label-image-mcp"
 url: "https://agent.sachin-kale.com/#annotate"
@@ -47,3 +47,11 @@ references:
       - name: "et al."
     year: 2024
     journal: "Nature Communications"
+  - type: article
+    title: "HoVer-Net: Simultaneous segmentation and classification of nuclei in multi-tissue histology images"
+    authors:
+      - family-names: Graham
+        given-names: Simon
+      - name: "et al."
+    year: 2019
+    journal: "Medical Image Analysis"

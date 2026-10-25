@@ -88,6 +88,8 @@ not used for any choice. A nucleus counts as found when its outline overlaps the
 - The model is StarDist's pretrained H&E model, not trained on NuInsSeg: models trained on a dataset score
   higher on it. Read these as what to expect on new images, and review outlines before training on them.
 - Reproduce: [benchmarks/nuinsseg.py](benchmarks/nuinsseg.py) runs the same method locally.
+- Cell types (`classify_cells`) are not benchmarked here yet: NuInsSeg has no cell-type labels. HoVer-Net's
+  published results on PanNuke are the reference until then.
 
 ## Your data
 
@@ -140,6 +142,7 @@ mkdir -p ~/.claude/skills && cp -r /tmp/label-image-mcp/skills/label-image ~/.cl
 | `upload_image_from_url(url, name?, category?, description?)` | Download an image from an https URL (up to 20 MB) and upload it |
 | `segment_objects(image_id, objects, model?, save?)` | Trace exact outlines with Segment Anything from a rough box or a point per object, and save them as polygons. `model`: `sam` (photos) or `medsam` (CT, MRI, X-ray, ultrasound, endoscopy, pathology; boxes only) |
 | `detect_nuclei(image_id, max_nuclei?, mark_enlarged?, replace_previous?, save?, microns_per_pixel?)` | Find and outline every nucleus in an H&E image with StarDist, automatically (no boxes). Returns count, density, median area and size variation; nuclei over 2.5x the median area are labelled `enlarged nucleus`. With `microns_per_pixel` (often 0.25 at 40x, 0.5 at 20x) also in µm² and nuclei per mm² |
+| `classify_cells(image_id, wait_seconds?)` | Types the nuclei `detect_nuclei` saved as **tumour, immune, connective tissue, dead or normal epithelial** cells (HoVer-Net trained on PanNuke, 19 tissues), relabelling each nucleus and returning counts, percentages and the immune-to-tumour ratio. Runs in the background, 30 to 90 s. **Research and education only** (CC BY-NC-SA 4.0 weights) |
 | `normalize_stain(image_id)` | Macenko stain normalization: a copy with standard H&E colours, saved as a new image |
 | `check_image_quality(image_id)` | HistoQC-style checks (tissue fraction, blur, marker pen, exposure, faint staining) with a verdict and warnings |
 | `warm_up(model?)` | Start loading a model without waiting: `sam`, `medsam` or `nuclei` (each takes a minute or two after a quiet spell) |
@@ -156,8 +159,8 @@ ask before the destructive ones. The server also offers three prompts: **Analyse
 |---|---|
 | `upload_slide(path, name?, category?, analyze?, max_tiles?)` | Upload a whole-slide file (.svs, .ndpi, pyramidal .tif/.tiff, up to 5 GB; streamed, never loaded into memory) and start its analysis. Local server only |
 | `upload_slide_from_url(url, ...)` | The same from an https URL, copied straight into storage |
-| `analyze_slide(image_id, max_tiles?, restart?, wait_seconds?)` | Background analysis: finds the tissue, samples up to 48 tiles (256 × 256 µm at 40x), and runs the quality check and StarDist nuclei on each. Waits up to `wait_seconds` and reports progress |
-| `get_slide_analysis(image_id)` | Status, or the results: nuclei per mm², median nuclear area in µm², size variation and enlarged nuclei across the slide, per-tile values and quality |
+| `analyze_slide(image_id, max_tiles?, cell_types?, restart?, wait_seconds?)` | Background analysis: finds the tissue, samples up to 48 tiles (256 × 256 µm at 40x), and runs the quality check, StarDist nuclei and (by default) cell types on each. Waits up to `wait_seconds` and reports progress |
+| `get_slide_analysis(image_id)` | Status, or the results: nuclei per mm², median nuclear area in µm², size variation, enlarged nuclei and cell-type percentages across the slide, per-tile values and quality |
 
 After the analysis the slide's image in the library is its overview, with the analysed tiles marked (the
 three densest in red), so `view_image` and the web app show it. The three densest tiles are saved as

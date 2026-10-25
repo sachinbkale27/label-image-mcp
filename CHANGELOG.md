@@ -4,6 +4,15 @@ All notable changes to Histopathology Annotation MCP (`label-image-mcp`). Versio
 [semantic versioning](https://semver.org): until 1.0, a minor version (0.x.0) may change or remove tools,
 and the change is listed here under **Changed** or **Removed**.
 
+## 0.6.0 (2026-10-25)
+
+### Added
+- `classify_cells`: types detected nuclei as tumour, immune, connective tissue, dead or normal epithelial
+  cells with HoVer-Net (PanNuke weights, CC BY-NC-SA 4.0: research and education only), in the background.
+  Nuclei are relabelled by type; the result has counts, percentages and the immune-to-tumour ratio.
+- Whole slides get cell types too (`analyze_slide(cell_types=True)`, the default): per tile and for the slide,
+  in the densest-tile images and in the QuPath GeoJSON. With cell types on, `max_tiles` defaults to 12.
+
 ## 0.5.0 (2026-10-24)
 
 ### Added

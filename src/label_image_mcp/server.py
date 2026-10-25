@@ -89,7 +89,8 @@ snapshots (up to 20 MB), and whole-slide files (SVS, NDPI, pyramidal TIFF, up to
   segment_objects are in the right place. After annotating, view_image(with_annotations=true) to check
   the outlines, and fix wrong ones with remove_annotations.
 - Histology: check_image_quality first; call warm_up("nuclei") early, since the first run after a quiet
-  spell takes up to a minute; then detect_nuclei. Pass microns_per_pixel (often 0.25 at 40x, 0.5 at 20x)
+  spell takes up to a minute; then detect_nuclei, and classify_cells for tumour, immune and other cell types
+  (research and education only). Pass microns_per_pixel (often 0.25 at 40x, 0.5 at 20x)
   when known, for sizes in square microns.
 - Other objects: warm_up("sam"), or "medsam" for medical images, then segment_objects with a rough box
   per object. Prefer it to drawing polygons yourself.
@@ -473,6 +474,40 @@ async def warm_up(ctx: Context, model: Literal["sam", "medsam", "nuclei"] = "sam
     return await client.warm_segmenter(model)
 
 
+@mcp.tool(title="Classify cell types", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False))
+async def classify_cells(
+    ctx: Context,
+    image_id: str,
+    wait_seconds: Annotated[int, Field(ge=0, le=240)] = 90,
+) -> dict[str, Any]:
+    """Classify the nuclei detect_nuclei saved on an H&E image as tumour, immune, connective tissue, dead or normal
+    epithelial cells, and wait up to wait_seconds for the result.
+
+    Runs HoVer-Net (PanNuke weights, CC BY-NC-SA 4.0: research and education only) in the background, about 30
+    to 90 seconds per image: each nucleus annotation is relabelled with its type, and the result has counts,
+    percentages and the immune-to-tumour ratio. Run detect_nuclei first. If it's still running when the wait
+    ends, call it again (it waits for the same run).
+    """
+    client = _client(ctx)
+    image = await client.get_image(image_id)
+    if (image.get("cellTypes") or {}).get("status") not in ("queued", "running"):
+        try:
+            await client.start_classification(image_id)
+        except ApiError as exc:
+            if exc.status != 409:
+                raise
+    waited = 0
+    while True:
+        image = await client.get_image(image_id)
+        result = image.get("cellTypes") or {}
+        if result.get("status") in ("done", "failed") or waited >= wait_seconds:
+            break
+        await asyncio.sleep(min(SLIDE_POLL_SECONDS, wait_seconds - waited))
+        waited += SLIDE_POLL_SECONDS
+        await ctx.report_progress(waited, wait_seconds, "finding cell types")
+    return {"imageId": image_id, **result}
+
+
 SLIDE_POLL_SECONDS = 5
 
 
@@ -493,7 +528,8 @@ def _slide_report(image: dict[str, Any]) -> dict[str, Any]:
 async def analyze_slide(
     ctx: Context,
     image_id: str,
-    max_tiles: Annotated[int, Field(ge=1, le=48)] = 16,
+    max_tiles: Annotated[int | None, Field(ge=1, le=48)] = None,
+    cell_types: bool = True,
     restart: bool = False,
     wait_seconds: Annotated[int, Field(ge=0, le=240)] = 50,
 ) -> dict[str, Any]:
@@ -501,8 +537,10 @@ async def analyze_slide(
 
     Finds the tissue, samples up to max_tiles tiles of it (256 x 256 um each at 40x) and runs the quality
     check and StarDist nuclei on each: nuclei per mm2, nuclear size in um2, size variation and enlarged nuclei
-    across the slide, plus per-tile values. Takes about 10 seconds per tile, plus a minute when the model
-    starts. If it's still running when the wait ends, call get_slide_analysis later. An analysis already
+    across the slide, plus per-tile values. With cell_types (default) each nucleus is also typed as tumour,
+    immune, connective tissue, dead or normal epithelial (HoVer-Net, PanNuke weights: research and education
+    only), about 40 seconds a tile, so max_tiles defaults to 12 (16 without cell types). Allow a minute more
+    when the models start. If it's still running when the wait ends, call get_slide_analysis later. An analysis already
     running is waited for; restart=true starts a new one (e.g. with more tiles).
     """
     client = _client(ctx)
@@ -510,7 +548,7 @@ async def analyze_slide(
     status = (image.get("slideAnalysis") or {}).get("status")
     if restart or status not in ("queued", "running", "done"):
         try:
-            await client.start_slide_analysis(image_id, max_tiles)
+            await client.start_slide_analysis(image_id, max_tiles, cell_types)
         except ApiError as exc:
             if exc.status != 409:  # 409: already running, so wait for it
                 raise
@@ -545,7 +583,8 @@ async def upload_slide(
     name: str | None = None,
     category: str | None = None,
     analyze: bool = True,
-    max_tiles: Annotated[int, Field(ge=1, le=48)] = 16,
+    max_tiles: Annotated[int | None, Field(ge=1, le=48)] = None,
+    cell_types: bool = True,
 ) -> dict[str, Any]:
     """Upload a whole-slide file (.svs, .ndpi, pyramidal .tif/.tiff, up to 5 GB) from the machine running this
     server, and start its analysis in the background (see analyze_slide)."""
@@ -553,7 +592,7 @@ async def upload_slide(
     client = _client(ctx)
     image = await client.upload_slide(path, **fields)
     if analyze:
-        await client.start_slide_analysis(image["imageId"], max_tiles)
+        await client.start_slide_analysis(image["imageId"], max_tiles, cell_types)
     return _summary(image) | {"analysis": "started" if analyze else "not started"}
 
 
@@ -564,7 +603,8 @@ async def upload_slide_from_url(
     name: str | None = None,
     category: str | None = None,
     analyze: bool = True,
-    max_tiles: Annotated[int, Field(ge=1, le=48)] = 16,
+    max_tiles: Annotated[int | None, Field(ge=1, le=48)] = None,
+    cell_types: bool = True,
 ) -> dict[str, Any]:
     """Copy a whole-slide file (.svs, .ndpi, pyramidal .tif/.tiff, up to 5 GB) from an https URL into Image Label,
     and start its analysis in the background (see analyze_slide)."""
@@ -572,7 +612,7 @@ async def upload_slide_from_url(
     client = _client(ctx)
     image = await client.upload_slide_from_url(url, **fields)
     if analyze:
-        await client.start_slide_analysis(image["imageId"], max_tiles)
+        await client.start_slide_analysis(image["imageId"], max_tiles, cell_types)
     return _summary(image) | {"analysis": "started" if analyze else "not started"}
 
 

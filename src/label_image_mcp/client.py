@@ -208,8 +208,14 @@ class LabelImageClient:
                 raise ApiError("The server didn't say how large the slide is; download it and use upload_slide")
             return await self._upload_stream(resp.aiter_bytes(CHUNK), size, name, fields)
 
-    async def start_slide_analysis(self, image_id: str, max_tiles: int) -> dict[str, Any]:
-        return await self._request("POST", f"/images/{image_id}/pathology", json={"action": "slide", "max_tiles": max_tiles})
+    async def start_slide_analysis(self, image_id: str, max_tiles: int | None = None, cell_types: bool = True) -> dict[str, Any]:
+        body: dict[str, Any] = {"action": "slide", "cell_types": cell_types}
+        if max_tiles:
+            body["max_tiles"] = max_tiles
+        return await self._request("POST", f"/images/{image_id}/pathology", json=body)
+
+    async def start_classification(self, image_id: str) -> dict[str, Any]:
+        return await self._request("POST", f"/images/{image_id}/pathology", json={"action": "classify"})
 
     async def save_annotations(self, image_id: str, annotations: list[dict[str, Any]]) -> dict[str, Any]:
         return await self._request("PUT", f"/images/{image_id}/annotations", json={"annotations": annotations})
