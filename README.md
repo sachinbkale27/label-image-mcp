@@ -8,6 +8,7 @@
 [![CI](https://github.com/sachinbkale27/label-image-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/sachinbkale27/label-image-mcp/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.sachinbkale27%2Flabel--image--mcp-6f42c1)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.sachinbkale27/label-image-mcp)
+[![M8ven Score](https://m8ven.ai/badge/mcp/sachinbkale27-label-image-mcp-1v4i0w?v=953b1eb82140527ad1bb9e6422dc6df3)](https://m8ven.ai/mcp/sachinbkale27-label-image-mcp-1v4i0w?s=readme)
 
 ![Loading an H&E breast cancer slide, outlining every nucleus with StarDist, Diagnose: an AI interpretation written as a report, problematic regions outlined on the image and the agent's report, then Ask AI: a question about the results answered with an illustration labelled from the answer](https://raw.githubusercontent.com/sachinbkale27/label-image-mcp/main/docs/demo.gif)
 
