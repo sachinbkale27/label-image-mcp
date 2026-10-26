@@ -393,6 +393,9 @@ async def test_export_dataset_writes_files_locally(api, tmp_path):
 async def test_tools_say_what_they_change():
     tools = {t.name: t for t in await server.mcp.list_tools()}
     assert all(t.title and t.annotations for t in tools.values())
+    hints = ("readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint")
+    missing = {n: [h for h in hints if not isinstance(getattr(t.annotations, h), bool)] for n, t in tools.items()}
+    assert not {n: m for n, m in missing.items() if m}, "every tool declares all four hints"
     assert tools["replace_annotations"].annotations.destructiveHint is True
     assert tools["view_image"].annotations.readOnlyHint is True
     assert "view_image" in server.mcp.instructions

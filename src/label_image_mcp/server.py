@@ -110,9 +110,10 @@ mcp = FastMCP("histopathology-annotation", instructions=INSTRUCTIONS, lifespan=l
 
 HOSTED = False  # set by configure_hosted (--hosted): no local files on a shared server
 
-READ = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
-ADD = ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=False)
-DELETE = ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=False)
+# All four hints on every tool, explicitly (some directories reject tools that leave any out)
+READ = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
+ADD = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False)  # each call adds more
+DELETE = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=False)  # new annotation ids each call
 
 
 VIEWER_HEADERS = (
@@ -277,7 +278,7 @@ async def upload_image(
     return _summary(await _client(ctx).upload_image(path, **fields))
 
 
-@mcp.tool(title="Upload an image from a URL", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True))
+@mcp.tool(title="Upload an image from a URL", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True))
 async def upload_image_from_url(
     ctx: Context,
     url: str,
@@ -482,7 +483,7 @@ async def check_image_quality(ctx: Context, image_id: str) -> dict[str, Any]:
     return {k: result[k] for k in ("verdict", "warnings", "metrics", "width", "height")}
 
 
-@mcp.tool(title="Warm up a model", annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False))
+@mcp.tool(title="Warm up a model", annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False))
 async def warm_up(ctx: Context, model: Literal["sam", "medsam", "nuclei"] = "sam") -> dict[str, Any]:
     """Start loading a model ahead of use, without waiting for it: "sam" or "medsam" for segment_objects,
     "nuclei" for detect_nuclei.
@@ -610,7 +611,7 @@ async def get_slide_analysis(ctx: Context, image_id: str) -> dict[str, Any]:
     return _slide_report(await _client(ctx).get_image(image_id))
 
 
-@mcp.tool(title="Upload a whole slide", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=False))
+@mcp.tool(title="Upload a whole slide", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False))
 async def upload_slide(
     ctx: Context,
     path: str,
@@ -630,7 +631,7 @@ async def upload_slide(
     return _summary(image) | {"analysis": "started" if analyze else "not started"}
 
 
-@mcp.tool(title="Upload a whole slide from a URL", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True))
+@mcp.tool(title="Upload a whole slide from a URL", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True))
 async def upload_slide_from_url(
     ctx: Context,
     url: str,
@@ -650,7 +651,7 @@ async def upload_slide_from_url(
     return _summary(image) | {"analysis": "started" if analyze else "not started"}
 
 
-@mcp.tool(title="Share an image link", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True))
+@mcp.tool(title="Share an image link", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True))
 async def share_image(ctx: Context, image_id: str) -> dict[str, Any]:
     """A link that opens the image, with its current annotations, in the Image Label web app in anyone's
     browser: the app copies it into that person's own workspace to edit and export, with no account needed.
@@ -703,7 +704,7 @@ MAX_DATASET_IMAGES = 100
 MAX_INLINE_BYTES = 1_500_000
 
 
-@mcp.tool(title="Export a dataset", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=False))
+@mcp.tool(title="Export a dataset", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False))
 async def export_dataset(
     ctx: Context,
     format: Literal["coco", "yolo", "qupath"] = "coco",
