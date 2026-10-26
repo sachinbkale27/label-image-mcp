@@ -110,6 +110,10 @@ mcp = FastMCP("histopathology-annotation", instructions=INSTRUCTIONS, lifespan=l
 
 HOSTED = False  # set by configure_hosted (--hosted): no local files on a shared server
 
+# Parameter types shared by the tools, described for the AI client
+ImageId = Annotated[str, Field(description="Id of an image in Image Label: the imageId (a UUID string) returned by list_images or an upload.")]
+SlideId = Annotated[str, Field(description="Id of a whole slide: the imageId (a UUID string) returned by upload_slide or upload_slide_from_url.")]
+
 # All four hints on every tool, explicitly (some directories reject tools that leave any out)
 READ = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
 ADD = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False)  # each call adds more
@@ -150,7 +154,10 @@ def _summary(image: dict[str, Any]) -> dict[str, Any]:
 
 
 @mcp.tool(title="List images", annotations=READ)
-async def list_images(ctx: Context, category: str | None = None) -> list[dict[str, Any]]:
+async def list_images(
+    ctx: Context,
+    category: Annotated[str | None, Field(description="Only images in this category (case-insensitive); omit to list all images.")] = None,
+) -> list[dict[str, Any]]:
     """List images saved in Image Label, optionally filtered by category (case-insensitive).
     Returns summaries; use get_image for annotations and the viewing URL."""
     images = await _client(ctx).list_images()
@@ -160,7 +167,10 @@ async def list_images(ctx: Context, category: str | None = None) -> list[dict[st
 
 
 @mcp.tool(title="Get image details", annotations=READ)
-async def get_image(ctx: Context, image_id: str) -> dict[str, Any]:
+async def get_image(
+    ctx: Context,
+    image_id: ImageId,
+) -> dict[str, Any]:
     """Get one image's metadata, all annotations, and a signed viewing URL (valid 24h)."""
     image = await _client(ctx).get_image(image_id)
     image.pop("downloadUrl", None)
@@ -189,11 +199,11 @@ def _overlaps(ann: dict[str, Any], region: Region) -> bool:
 @mcp.tool(title="View image", annotations=READ, structured_output=False)
 async def view_image(
     ctx: Context,
-    image_id: str,
-    with_annotations: bool = False,
-    region: Region | None = None,
-    grid: bool = True,
-    max_size: Annotated[int, Field(ge=256, le=1568)] = 1024,
+    image_id: ImageId,
+    with_annotations: Annotated[bool, Field(description="Draw the image's saved annotations on the picture, to check them.")] = False,
+    region: Annotated[Region | None, Field(description="Zoom into this part of the image (x, y, width, height in original image pixels); omit for the whole image.")] = None,
+    grid: Annotated[bool, Field(description="Draw the yellow coordinate grid, labelled in original image pixels.")] = True,
+    max_size: Annotated[int, Field(ge=256, le=1568, description="Longest side of the returned picture, in pixels.")] = 1024,
 ):
     """Look at an image: returns the picture itself, scaled to at most max_size pixels, with a yellow grid
     labelled in the ORIGINAL image's pixel coordinates.
@@ -221,11 +231,11 @@ async def view_image(
 @mcp.tool(title="Update image details", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False))
 async def update_image_metadata(
     ctx: Context,
-    image_id: str,
-    name: str | None = None,
-    category: str | None = None,
-    sub_category: str | None = None,
-    description: str | None = None,
+    image_id: ImageId,
+    name: Annotated[str | None, Field(description="New display name; omit to keep it.")] = None,
+    category: Annotated[str | None, Field(description="New category; omit to keep it.")] = None,
+    sub_category: Annotated[str | None, Field(description="New sub-category; omit to keep it.")] = None,
+    description: Annotated[str | None, Field(description="New description; omit to keep it.")] = None,
 ) -> dict[str, Any]:
     """Update an image's name, category, sub-category or description. Omitted fields are left unchanged."""
     updates = {
@@ -239,7 +249,11 @@ async def update_image_metadata(
 
 
 @mcp.tool(title="Add annotations", annotations=ADD)
-async def add_annotations(ctx: Context, image_id: str, annotations: list[AnnotationInput]) -> dict[str, Any]:
+async def add_annotations(
+    ctx: Context,
+    image_id: ImageId,
+    annotations: Annotated[list[AnnotationInput], Field(description="Annotations to add (polygon, circle, rectangle, pin or arrow, in image pixels); existing annotations are kept.")],
+) -> dict[str, Any]:
     """Append annotations to an image, keeping the existing ones."""
     client = _client(ctx)
     image = await client.get_image(image_id)
@@ -249,14 +263,28 @@ async def add_annotations(ctx: Context, image_id: str, annotations: list[Annotat
 
 
 @mcp.tool(title="Replace all annotations", annotations=DELETE)
-async def replace_annotations(ctx: Context, image_id: str, annotations: list[AnnotationInput]) -> dict[str, Any]:
+async def replace_annotations(
+    ctx: Context,
+    image_id: ImageId,
+    annotations: Annotated[list[AnnotationInput], Field(description="The complete new list of annotations; every existing annotation not in it is deleted.")],
+) -> dict[str, Any]:
     """Replace ALL annotations on an image with the given list. Pass an empty list to clear them."""
     return await _client(ctx).save_annotations(image_id, [a.to_record() for a in annotations])
 
 
 @mcp.tool(title="Remove annotations", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False))
-async def remove_annotations(ctx: Context, image_id: str, annotation_ids: list[str]) -> dict[str, Any]:
-    """Remove specific annotations from an image by their ids."""
+async def remove_annotations(
+    ctx: Context,
+    image_id: ImageId,
+    annotation_ids: Annotated[list[str], Field(description="Ids of the annotations to delete (the id field of each annotation from get_image); ids not on the image are ignored.")],
+) -> dict[str, Any]:
+    """Remove specific annotations from an image by their ids, keeping all the others.
+
+    Use it to delete a few annotations; to change many at once (rename labels, fix shapes) use
+    replace_annotations instead. Get the ids from get_image (each annotation's id field). Ids that are not on
+    the image are ignored, and the rest are removed in one save. Returns the number removed and the new
+    annotation count.
+    """
     client = _client(ctx)
     existing = (await client.get_image(image_id)).get("annotations") or []
     to_remove = set(annotation_ids)
@@ -268,10 +296,10 @@ async def remove_annotations(ctx: Context, image_id: str, annotation_ids: list[s
 @mcp.tool(title="Upload a local image", annotations=ADD)
 async def upload_image(
     ctx: Context,
-    path: str,
-    name: str | None = None,
-    category: str | None = None,
-    description: str | None = None,
+    path: Annotated[str, Field(description="Absolute path of an image file (up to 20 MB) on the machine running this server.")],
+    name: Annotated[str | None, Field(description="Display name; defaults to the file name.")] = None,
+    category: Annotated[str | None, Field(description="Category to file the image under (list_images filters by it).")] = None,
+    description: Annotated[str | None, Field(description="Free-text description stored with the image.")] = None,
 ) -> dict[str, Any]:
     """Upload a local image file (path on the machine running this server) to Image Label."""
     fields = {k: v for k, v in {"name": name, "category": category, "description": description}.items() if v}
@@ -281,10 +309,10 @@ async def upload_image(
 @mcp.tool(title="Upload an image from a URL", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True))
 async def upload_image_from_url(
     ctx: Context,
-    url: str,
-    name: str | None = None,
-    category: str | None = None,
-    description: str | None = None,
+    url: Annotated[str, Field(description="Public http(s) URL of the image (up to 20 MB); the server downloads it.")],
+    name: Annotated[str | None, Field(description="Display name; defaults to the file name in the URL.")] = None,
+    category: Annotated[str | None, Field(description="Category to file the image under (list_images filters by it).")] = None,
+    description: Annotated[str | None, Field(description="Free-text description stored with the image.")] = None,
 ) -> dict[str, Any]:
     """Download an image from an https URL and upload it to Image Label (PNG, JPEG, WebP, GIF, BMP or
     TIFF, up to 20 MB). Use this for images that are online, e.g. ones attached in a chat."""
@@ -330,10 +358,10 @@ def _confidence(score: float) -> Literal["high", "medium", "low"]:
 @mcp.tool(title="Outline objects (Segment Anything)", annotations=ADD)
 async def segment_objects(
     ctx: Context,
-    image_id: str,
-    objects: list[SegmentTarget],
-    model: Literal["sam", "medsam"] = "sam",
-    save: bool = True,
+    image_id: ImageId,
+    objects: Annotated[list[SegmentTarget], Field(description="Objects to outline, each with a label and a rough box (x, y, width, height) or a point on it, in image pixels.")],
+    model: Annotated[Literal["sam", "medsam"], Field(description="'sam' for everyday images; 'medsam' for medical images (CT, MRI, X-ray, ultrasound, endoscopy, pathology), which needs a box for every object.")] = "sam",
+    save: Annotated[bool, Field(description="Save the outlines as polygon annotations; false only returns them.")] = True,
 ) -> dict[str, Any]:
     """Trace precise outlines with Segment Anything and add them as polygon annotations.
 
@@ -395,15 +423,16 @@ def _nucleus_confidence(score: float) -> Literal["high", "medium", "low"]:
     return "high" if score >= 0.85 else "medium" if score >= 0.75 else "low"
 
 
-@mcp.tool(title="Detect nuclei (StarDist)", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False))
+# Destructive: by default it deletes the nuclei an earlier run saved (other annotations are kept)
+@mcp.tool(title="Detect nuclei (StarDist)", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False))
 async def detect_nuclei(
     ctx: Context,
-    image_id: str,
-    max_nuclei: Annotated[int, Field(ge=1, le=400)] = 300,
-    mark_enlarged: bool = True,
-    replace_previous: bool = True,
-    save: bool = True,
-    microns_per_pixel: Annotated[float | None, Field(ge=0.05, le=2)] = None,
+    image_id: ImageId,
+    max_nuclei: Annotated[int, Field(ge=1, le=400, description="Most nuclei to save, the most confident first.")] = 300,
+    mark_enlarged: Annotated[bool, Field(description="Label nuclei over 2.5x the median area 'enlarged nucleus' (in red); the rest are 'nucleus'.")] = True,
+    replace_previous: Annotated[bool, Field(description="Delete nuclei saved by an earlier detect_nuclei run on this image before saving the new ones (other annotations are kept). False adds to them.")] = True,
+    save: Annotated[bool, Field(description="Save the outlines as annotations; false only returns the measurements.")] = True,
+    microns_per_pixel: Annotated[float | None, Field(ge=0.05, le=2, description="Scanner resolution in microns per pixel (often 0.25 at 40x, 0.5 at 20x); adds sizes in square microns and density per square millimetre.")] = None,
 ) -> dict[str, Any]:
     """Find and outline every cell nucleus in an H&E-stained histology image with StarDist, automatically.
 
@@ -411,7 +440,9 @@ async def detect_nuclei(
     images give poor results). Returns the count, density, median nuclear area and how much nuclear size
     varies (a rough measure of pleomorphism). With mark_enlarged, nuclei over 2.5x the median area are
     labelled "enlarged nucleus" (in red), the rest "nucleus". The most confident max_nuclei outlines are
-    saved; replace_previous removes nuclei saved by an earlier run first. With microns_per_pixel (the
+    saved. By default (replace_previous) nuclei saved by an earlier detect_nuclei run on this image are
+    deleted first, so running it again replaces them rather than doubling them; other annotations are never
+    touched. Pass replace_previous=false to keep the earlier nuclei. With microns_per_pixel (the
     scanner's resolution: often 0.25 at 40x, 0.5 at 20x) the image is resized to the model's best resolution
     and sizes are also given in square microns and density per square millimetre; without it, the image is
     resized by the size of its nuclei. The first run after a quiet spell takes up to a minute while the model starts
@@ -462,7 +493,10 @@ async def detect_nuclei(
 
 
 @mcp.tool(title="Normalize H&E stain", annotations=ADD)
-async def normalize_stain(ctx: Context, image_id: str) -> dict[str, Any]:
+async def normalize_stain(
+    ctx: Context,
+    image_id: ImageId,
+) -> dict[str, Any]:
     """Make an H&E image's colours standard (Macenko stain normalization), saved as a NEW image.
 
     Slides from different labs and scanners differ in pink and purple tones; normalizing them makes images
@@ -473,7 +507,10 @@ async def normalize_stain(ctx: Context, image_id: str) -> dict[str, Any]:
 
 
 @mcp.tool(title="Check slide quality", annotations=READ)
-async def check_image_quality(ctx: Context, image_id: str) -> dict[str, Any]:
+async def check_image_quality(
+    ctx: Context,
+    image_id: ImageId,
+) -> dict[str, Any]:
     """Check a histology image's quality before analysing it (HistoQC-style checks).
 
     Measures how much of the image is tissue, blur, marker-pen ink, over- and under-exposure and faint
@@ -484,7 +521,10 @@ async def check_image_quality(ctx: Context, image_id: str) -> dict[str, Any]:
 
 
 @mcp.tool(title="Warm up a model", annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False))
-async def warm_up(ctx: Context, model: Literal["sam", "medsam", "nuclei"] = "sam") -> dict[str, Any]:
+async def warm_up(
+    ctx: Context,
+    model: Annotated[Literal["sam", "medsam", "nuclei"], Field(description="Model to start: 'sam' or 'medsam' (for segment_objects) or 'nuclei' (for detect_nuclei and classify_cells).")] = "sam",
+) -> dict[str, Any]:
     """Start loading a model ahead of use, without waiting for it: "sam" or "medsam" for segment_objects,
     "nuclei" for detect_nuclei.
 
@@ -501,8 +541,8 @@ async def warm_up(ctx: Context, model: Literal["sam", "medsam", "nuclei"] = "sam
 @mcp.tool(title="Classify cell types", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False))
 async def classify_cells(
     ctx: Context,
-    image_id: str,
-    wait_seconds: Annotated[int, Field(ge=0, le=240)] = 90,
+    image_id: ImageId,
+    wait_seconds: Annotated[int, Field(ge=0, le=240, description="How long to wait for the result; if it isn't ready, call again later to read it.")] = 90,
 ) -> dict[str, Any]:
     """Classify the nuclei detect_nuclei saved on an H&E image as tumour, immune, connective tissue, dead or normal
     epithelial cells, and wait up to wait_seconds for the result.
@@ -554,12 +594,12 @@ def _slide_report(image: dict[str, Any]) -> dict[str, Any]:
 @mcp.tool(title="Analyse a whole slide", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False))
 async def analyze_slide(
     ctx: Context,
-    image_id: str,
-    coverage: Literal["sample", "full"] = "sample",
-    max_tiles: Annotated[int | None, Field(ge=1, le=48)] = None,
-    cell_types: bool | None = None,
-    restart: bool = False,
-    wait_seconds: Annotated[int, Field(ge=0, le=240)] = 50,
+    image_id: SlideId,
+    coverage: Annotated[Literal["sample", "full"], Field(description="'sample': up to max_tiles tiles spread over the tissue, in minutes; 'full': every tissue tile in parallel, with a density heatmap.")] = "sample",
+    max_tiles: Annotated[int | None, Field(ge=1, le=48, description="Tiles to analyse for a sample (default 12 with cell types, 16 without).")] = None,
+    cell_types: Annotated[bool | None, Field(description="Also type each nucleus (tumour, immune, connective tissue, dead, normal epithelial); default on for a sample, off for full coverage.")] = None,
+    restart: Annotated[bool, Field(description="Start a new analysis even if one already exists for this slide.")] = False,
+    wait_seconds: Annotated[int, Field(ge=0, le=240, description="How long to wait for the result; if it isn't ready, get_slide_analysis reads it later.")] = 50,
 ) -> dict[str, Any]:
     """Analyse a whole-slide image in the background and wait up to wait_seconds for the result.
 
@@ -604,7 +644,10 @@ async def analyze_slide(
 
 
 @mcp.tool(title="Get a slide's analysis", annotations=READ)
-async def get_slide_analysis(ctx: Context, image_id: str) -> dict[str, Any]:
+async def get_slide_analysis(
+    ctx: Context,
+    image_id: SlideId,
+) -> dict[str, Any]:
     """A whole slide's analysis: its status (queued, running with the current step, done or failed), and when done
     the slide-level summary, each analysed tile (position, nuclei per mm2, enlarged nuclei, quality), the images
     made from the densest tiles, and a link to every nucleus as QuPath GeoJSON."""
@@ -614,12 +657,12 @@ async def get_slide_analysis(ctx: Context, image_id: str) -> dict[str, Any]:
 @mcp.tool(title="Upload a whole slide", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False))
 async def upload_slide(
     ctx: Context,
-    path: str,
-    name: str | None = None,
-    category: str | None = None,
-    analyze: bool = True,
-    max_tiles: Annotated[int | None, Field(ge=1, le=48)] = None,
-    cell_types: bool | None = None,
+    path: Annotated[str, Field(description="Absolute path of a whole-slide file (.svs, .ndpi or pyramidal .tif / .ome.tif, up to 5 GB) on the machine running this server.")],
+    name: Annotated[str | None, Field(description="Display name; defaults to the file name.")] = None,
+    category: Annotated[str | None, Field(description="Category to file the slide under (list_images filters by it).")] = None,
+    analyze: Annotated[bool, Field(description="Start a sample analysis (analyze_slide) as soon as the upload finishes.")] = True,
+    max_tiles: Annotated[int | None, Field(ge=1, le=48, description="Tiles to analyse for a sample (default 12 with cell types, 16 without).")] = None,
+    cell_types: Annotated[bool | None, Field(description="Also type each nucleus (tumour, immune, connective tissue, dead, normal epithelial); default on for a sample, off for full coverage.")] = None,
 ) -> dict[str, Any]:
     """Upload a whole-slide file (.svs, .ndpi, pyramidal .tif/.tiff, up to 5 GB) from the machine running this
     server, and start its analysis in the background (see analyze_slide)."""
@@ -634,12 +677,12 @@ async def upload_slide(
 @mcp.tool(title="Upload a whole slide from a URL", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True))
 async def upload_slide_from_url(
     ctx: Context,
-    url: str,
-    name: str | None = None,
-    category: str | None = None,
-    analyze: bool = True,
-    max_tiles: Annotated[int | None, Field(ge=1, le=48)] = None,
-    cell_types: bool | None = None,
+    url: Annotated[str, Field(description="Public http(s) URL of a whole-slide file (.svs, .ndpi or pyramidal .tif / .ome.tif, up to 5 GB).")],
+    name: Annotated[str | None, Field(description="Display name; defaults to the file name in the URL.")] = None,
+    category: Annotated[str | None, Field(description="Category to file the slide under (list_images filters by it).")] = None,
+    analyze: Annotated[bool, Field(description="Start a sample analysis (analyze_slide) as soon as the upload finishes.")] = True,
+    max_tiles: Annotated[int | None, Field(ge=1, le=48, description="Tiles to analyse for a sample (default 12 with cell types, 16 without).")] = None,
+    cell_types: Annotated[bool | None, Field(description="Also type each nucleus (tumour, immune, connective tissue, dead, normal epithelial); default on for a sample, off for full coverage.")] = None,
 ) -> dict[str, Any]:
     """Copy a whole-slide file (.svs, .ndpi, pyramidal .tif/.tiff, up to 5 GB) from an https URL into Image Label,
     and start its analysis in the background (see analyze_slide)."""
@@ -652,7 +695,10 @@ async def upload_slide_from_url(
 
 
 @mcp.tool(title="Share an image link", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True))
-async def share_image(ctx: Context, image_id: str) -> dict[str, Any]:
+async def share_image(
+    ctx: Context,
+    image_id: ImageId,
+) -> dict[str, Any]:
     """A link that opens the image, with its current annotations, in the Image Label web app in anyone's
     browser: the app copies it into that person's own workspace to edit and export, with no account needed.
 
@@ -664,7 +710,9 @@ async def share_image(ctx: Context, image_id: str) -> dict[str, Any]:
 
 @mcp.tool(title="Export annotations", annotations=READ)
 async def export_annotations(
-    ctx: Context, image_id: str, format: Literal["coco", "yolo", "qupath"] = "coco"
+    ctx: Context,
+    image_id: ImageId,
+    format: Annotated[Literal["coco", "yolo", "qupath"], Field(description="'coco' (COCO JSON), 'yolo' (YOLO labels and classes) or 'qupath' (QuPath GeoJSON, nuclei as detections).")] = "coco",
 ) -> dict[str, Any]:
     """Export an image's annotations: COCO JSON or YOLO (polygons and circles, as the web app exports), or
     QuPath GeoJSON (File > Import objects in QuPath; nuclei found by StarDist come in as detections)."""
@@ -707,11 +755,11 @@ MAX_INLINE_BYTES = 1_500_000
 @mcp.tool(title="Export a dataset", annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False))
 async def export_dataset(
     ctx: Context,
-    format: Literal["coco", "yolo", "qupath"] = "coco",
-    category: str | None = None,
-    image_ids: list[str] | None = None,
-    classes: list[str] | None = None,
-    output_dir: str | None = None,
+    format: Annotated[Literal["coco", "yolo", "qupath"], Field(description="'coco' (COCO JSON), 'yolo' (YOLO labels and classes) or 'qupath' (QuPath GeoJSON, nuclei as detections).")] = "coco",
+    category: Annotated[str | None, Field(description="Export every image in this category (case-insensitive); give this or image_ids.")] = None,
+    image_ids: Annotated[list[str] | None, Field(description="Export these images (up to 100); give this or category.")] = None,
+    classes: Annotated[list[str] | None, Field(description="Class names in the order to number them; other labels follow in first-seen order.")] = None,
+    output_dir: Annotated[str | None, Field(description="Folder on the machine running this server to write the files to (not when hosted); omit to return them.")] = None,
 ) -> dict[str, Any]:
     """Export several images as ONE training dataset, with one class list so ids mean the same everywhere.
 

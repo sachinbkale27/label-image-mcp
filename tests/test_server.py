@@ -396,6 +396,8 @@ async def test_tools_say_what_they_change():
     hints = ("readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint")
     missing = {n: [h for h in hints if not isinstance(getattr(t.annotations, h), bool)] for n, t in tools.items()}
     assert not {n: m for n, m in missing.items() if m}, "every tool declares all four hints"
+    undescribed = [(n, p) for n, t in tools.items() for p, schema in t.inputSchema["properties"].items() if not schema.get("description")]
+    assert not undescribed, "every parameter is described"
     assert tools["replace_annotations"].annotations.destructiveHint is True
     assert tools["view_image"].annotations.readOnlyHint is True
     assert "view_image" in server.mcp.instructions

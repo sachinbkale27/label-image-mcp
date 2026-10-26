@@ -165,7 +165,7 @@ mkdir -p ~/.claude/skills && cp -r /tmp/label-image-mcp/skills/label-image ~/.cl
 | `export_annotations(image_id, format)` | COCO JSON or YOLO, same output as the web app's export, or `qupath`: GeoJSON for QuPath's File > Import objects (StarDist nuclei come in as detections) |
 | `export_dataset(format?, category?, image_ids?, classes?, output_dir?)` | Many images (a category, or up to 100 ids) as ONE dataset with one class list: a COCO file, YOLO classes plus a label file per image, or a QuPath GeoJSON per image. `output_dir` writes the files (local server only) |
 
-Every tool is marked read-only or destructive (`replace_annotations`, `remove_annotations`), so clients can
+Every tool declares all four hints (read-only, destructive, idempotent, open-world) and describes every parameter. The destructive ones (`replace_annotations`, `remove_annotations`, and `detect_nuclei`, which replaces its own earlier nuclei) are marked, so clients can
 ask before the destructive ones. The server also offers three prompts: **Analyse a histology slide**,
 **Outline objects in an image** and **Build a training dataset**.
 
