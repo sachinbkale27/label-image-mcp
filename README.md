@@ -1,4 +1,4 @@
-# Histopathology Annotation MCP
+# Image, Histopathology Annotation MCP
 
 <!-- mcp-name: io.github.sachinbkale27/label-image-mcp -->
 
