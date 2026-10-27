@@ -122,6 +122,7 @@ DELETE = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHin
 
 VIEWER_HEADERS = (
     "x-viewer-visitor", "x-viewer-country", "x-viewer-region", "x-viewer-city", "x-viewer-time-zone", "x-viewer-internal",
+    "x-viewer-address",
 )
 
 

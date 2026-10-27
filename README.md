@@ -123,7 +123,8 @@ What happens to images you upload through this server (hosted on AWS in us-east-
 - **Usage counts.** Each call to the service names the AI client (for example `claude-ai/0.1.0`, from the MCP
   handshake) and the server version, so usage can be counted by client; the account is logged only as a hash.
   The service also logs the approximate place of each call (city, region, country and time zone, from its CDN)
-  and the local hour; IP addresses are not kept. Nothing from your conversation is sent.
+  and the local hour, and counts distinct IP addresses by a keyed hash; the addresses themselves are not kept.
+  Nothing from your conversation is sent.
 - **No patient identifiers, please.** Remove names, record numbers and slide labels (crop the label area or
   use a de-identified copy) before uploading. Results are for research and education, not diagnosis.
 
