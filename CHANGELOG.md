@@ -4,6 +4,18 @@ All notable changes to Histopathology Annotation MCP (`label-image-mcp`). Versio
 [semantic versioning](https://semver.org): until 1.0, a minor version (0.x.0) may change or remove tools,
 and the change is listed here under **Changed** or **Removed**.
 
+## 0.8.1 (2026-10-26)
+
+### Changed
+- Every tool declares all four hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`)
+  and every parameter has a description, for clients and directories that check them.
+- `detect_nuclei` is marked destructive: by default it deletes the nuclei an earlier run saved on the image
+  (other annotations are kept); its description and `remove_annotations`' say exactly what they change.
+- On the hosted server, the caller's approximate place (city, region, country, time zone) is passed on for
+  usage counts; IP addresses are not kept.
+- Package keywords and the extension and registry descriptions are up to date (guest access, histopathology,
+  whole slides).
+
 ## 0.8.0 (2026-10-25)
 
 ### Added

@@ -3,7 +3,7 @@
   "name": "io.github.sachinbkale27/label-image-mcp",
   "title": "Histopathology Annotation MCP",
   "description": "Image annotation, incl. histopathology: nuclei, outlines, QC → QuPath/COCO/YOLO. No GPU.",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "websiteUrl": "https://labels.sachin-kale.com/mcp",
   "repository": {
     "url": "https://github.com/sachinbkale27/label-image-mcp",
@@ -14,7 +14,7 @@
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "label-image-mcp",
-      "version": "0.8.0",
+      "version": "0.8.1",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
@@ -22,12 +22,12 @@
       "environmentVariables": [
         {
           "name": "LABEL_USERNAME",
-          "description": "Image Label account username (needed to save annotations and upload)",
+          "description": "Image Label account username; leave unset to work as a guest (images kept 7 days, no whole slides)",
           "isRequired": false
         },
         {
           "name": "LABEL_PASSWORD",
-          "description": "Image Label account password",
+          "description": "Image Label account password (only with LABEL_USERNAME)",
           "isRequired": false,
           "isSecret": true
         },
