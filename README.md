@@ -20,6 +20,10 @@ assistants upload images, outline every nucleus in an H&E slide automatically (S
 from rough boxes (Segment Anything, or MedSAM for medical images), check slide quality, normalize stain
 colours, clean up annotations, and export training data as COCO JSON, YOLO labels, YOLO classes or QuPath GeoJSON. A LangGraph agent is included.
 
+**Built for:** Whole Slide Imaging (WSI) · Digital Pathology · Bioinformatics · Tumor Microenvironment (TME)
+analysis (tumour, immune and stromal cell types, immune-to-tumour ratio) · MLOps Data Labeling (COCO, YOLO
+and QuPath training data).
+
 **Try it in the browser:** [https://agent.sachin-kale.com/#annotate](https://agent.sachin-kale.com/#annotate): upload a slide and annotate it, detect nuclei, check
 its quality or get an AI interpretation, with no setup.
 
