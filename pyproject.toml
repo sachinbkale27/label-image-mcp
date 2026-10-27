@@ -10,7 +10,8 @@ requires-python = ">=3.10"
 keywords = [
     "mcp", "model-context-protocol", "image-annotation", "coco", "yolo", "langgraph", "histopathology",
     "whole-slide-imaging", "wsi", "digital-pathology", "bioinformatics", "tumor-microenvironment", "tme",
-    "mlops", "data-labeling",
+    "mlops", "data-labeling", "computational-pathology", "nuclei-segmentation", "cell-segmentation",
+    "cell-classification", "medical-imaging", "stain-normalization", "computer-vision", "cancer-research",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
