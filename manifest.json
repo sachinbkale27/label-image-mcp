@@ -93,6 +93,10 @@
       "description": "Download an image from an https URL and upload it to Image Label"
     },
     {
+      "name": "find_regions",
+      "description": "Find the objects in an image automatically with Segment Anything and return them numbered, with exact boxes and a picture of the outlines"
+    },
+    {
       "name": "segment_objects",
       "description": "Trace precise outlines with Segment Anything (SAM, or MedSAM for medical images) from rough boxes or points, and save them as polygons"
     },

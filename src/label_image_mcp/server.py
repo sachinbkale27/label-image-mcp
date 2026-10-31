@@ -93,7 +93,9 @@ snapshots (up to 20 MB), and whole-slide files (SVS, NDPI, pyramidal TIFF, up to
   (research and education only). Pass microns_per_pixel (often 0.25 at 40x, 0.5 at 20x)
   when known, for sizes in square microns.
 - Other objects: warm_up("sam"), or "medsam" for medical images, then segment_objects with a rough box
-  per object. Prefer it to drawing polygons yourself.
+  per object. Prefer it to drawing polygons yourself. When there are many similar objects (glands,
+  cells, crypts) or boxes are hard to place, find_regions first: it outlines and numbers the objects it
+  finds by itself, and gives each one's exact box to pass to segment_objects.
 - Whole slides: upload_slide (or upload_slide_from_url) starts a background analysis of sampled tissue
   tiles; analyze_slide waits for it (or restarts it), get_slide_analysis reads the results. The slide's
   image is then its overview with the analysed tiles marked, the densest tiles are saved as images of
@@ -405,6 +407,45 @@ async def segment_objects(
     elif not save:
         summary["outlines"] = [{"label": a["label"], "points": a["points"]} for a in new]
     return summary
+
+
+REGION_COLOR = "#00e5ff"
+
+
+@mcp.tool(title="Find regions (Segment Anything)", annotations=READ, structured_output=False)
+async def find_regions(
+    ctx: Context,
+    image_id: ImageId,
+    max_size: Annotated[int, Field(ge=256, le=1568, description="Longest side of the returned picture, in pixels.")] = 1568,
+) -> list[Any]:
+    """Find the distinct objects in an image automatically, with no boxes needed: returns them numbered,
+    with each one's exact box, and a picture with the numbered outlines drawn on it. Nothing is saved.
+
+    Use it before segment_objects when an image has many similar objects (glands, cells, crypts, vessels)
+    or when boxes are hard to place: look at the picture, choose the numbers that are the objects asked
+    for, and pass their boxes unchanged to segment_objects (with model "medsam" for medical images). A
+    region inside another is a part of it (e.g. a gland's lumen inside the gland): choose the one that
+    matches the whole object. Objects not found as a region still need a box of your own. Takes up to
+    about 20 seconds; covers the image coarse to fine, so very small objects can be missed.
+    """
+    client = _client(ctx)
+    found = await client.find_regions(image_id)
+    regions = found.get("regions") or []
+    image, content = await client.fetch_image(image_id)
+    outlines = [
+        {"type": "polygon", "label": str(n), "color": REGION_COLOR, "points": [{"x": x, "y": y} for x, y in r["polygon"]]}
+        for n, r in enumerate(regions, 1)
+    ]
+    picture, _ = render(content, outlines, None, max_size, grid=False)
+    info = {
+        "image_id": image_id,
+        "image_size": [found.get("width"), found.get("height")],
+        "regions": [
+            {"region": n, "box": r["bbox"], "area": r["area"], "score": r["score"]} for n, r in enumerate(regions, 1)
+        ],
+        "note": "box is [x, y, width, height] in image pixels: pass it unchanged to segment_objects.",
+    }
+    return [json.dumps(info), Image(data=picture, format="jpeg")]
 
 
 NUCLEUS_COLOR = "#00b8d4"
@@ -840,7 +881,8 @@ def outline_objects(image: str, objects: str) -> str:
         f"Outline these objects: {objects}\nin this image: {image}\n"
         "1. If it is a URL, upload it with upload_image_from_url. Call warm_up('sam') (or 'medsam' for a "
         "medical image).\n"
-        "2. view_image to find each object, and read a rough box around it off the grid.\n"
+        "2. find_regions, and choose the numbered regions that are the objects; for any it missed, view_image "
+        "and read a rough box off the grid.\n"
         "3. segment_objects with those boxes.\n"
         "4. view_image with with_annotations=true; remove and redo any outline on the wrong object.\n"
         "5. Tell me what was outlined and how confident each outline is."

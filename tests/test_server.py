@@ -368,6 +368,29 @@ async def test_view_image_returns_the_picture_with_a_grid_and_annotations(api):
     assert "annotations_drawn" not in json.loads(plain.content[0].text)
 
 
+async def test_find_regions_numbers_the_regions_and_draws_them(api):
+    api.get(f"{API}/images/img-1").mock(return_value=ok({**IMAGE, "downloadUrl": "https://s3.test/cells.png"}))
+    api.get("https://s3.test/cells.png").mock(return_value=httpx.Response(200, content=_png()))
+    regions = [
+        {"polygon": [[10, 10], [50, 10], [50, 40]], "score": 0.97, "area": 600, "bbox": [10, 10, 40, 30], "regions": 1},
+        {"polygon": [[120, 50], [160, 50], [160, 90]], "score": 0.91, "area": 800, "bbox": [120, 50, 40, 40], "regions": 1},
+    ]
+    seg = api.post(f"{API}/images/img-1/segment").mock(
+        return_value=ok({"imageId": "img-1", "width": 200, "height": 100, "model": "sam", "regions": regions})
+    )
+    result = await call_raw("find_regions", {"image_id": "img-1"})
+    assert not result.isError, result.content
+    assert json.loads(seg.calls.last.request.content) == {"model": "sam", "auto": True}
+    info, picture = result.content
+    data = json.loads(info.text)
+    assert picture.type == "image" and picture.mimeType == "image/jpeg"
+    assert data["image_size"] == [200, 100]
+    assert data["regions"] == [
+        {"region": 1, "box": [10, 10, 40, 30], "area": 600, "score": 0.97},
+        {"region": 2, "box": [120, 50, 40, 40], "area": 800, "score": 0.91},
+    ]
+
+
 async def test_export_dataset_uses_one_class_list(api):
     second = {**IMAGE, "imageId": "img-2", "filename": "cells.png", "annotations": [
         {"id": "b1", "type": "circle", "label": "cell", "x": 20, "y": 20, "radius": 5, "color": "#00f", "createdAt": "t"},

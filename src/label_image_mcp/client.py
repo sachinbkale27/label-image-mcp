@@ -201,6 +201,18 @@ class LabelImageClient:
                 await asyncio.sleep(retry_delay)
         raise AssertionError("unreachable")
 
+    async def find_regions(self, image_id: str, *, attempts: int = 6, retry_delay: float = 15.0) -> dict[str, Any]:
+        """Objects Segment Anything finds by itself ("segment everything"), as outlined regions. Retried
+        like segment while the model starts."""
+        for attempt in range(attempts):
+            try:
+                return await self._request("POST", f"/images/{image_id}/segment", json={"model": "sam", "auto": True})
+            except ApiError as exc:
+                if exc.status not in (503, 504) or attempt == attempts - 1:
+                    raise
+                await asyncio.sleep(retry_delay)
+        raise AssertionError("unreachable")
+
     async def pathology(
         self, image_id: str, action: str, *, attempts: int = 8, retry_delay: float = 15.0, **params: Any
     ) -> dict[str, Any]:

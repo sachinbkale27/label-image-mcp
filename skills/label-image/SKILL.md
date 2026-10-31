@@ -73,6 +73,11 @@ Use `segment_objects(image_id, objects)` when the server has it: give each objec
 Segment Anything traces the exact edges and saves polygons. Use `model: "medsam"` for medical images
 (CT, MRI, X-ray, ultrasound, endoscopy, pathology), with a box for every object. Check `failed` in the
 result, and report the scores: an outline can be precise but of the wrong object if the box was off.
+When an image has many similar objects (glands, crypts, cells, vessels), or boxes are hard to place, call
+`find_regions(image_id)` first: it outlines and numbers the objects it finds by itself and returns each
+one's exact box. Choose the numbers that are the objects asked for (for a region inside another, such as
+a gland's lumen inside the gland, choose the whole object) and pass their boxes unchanged to
+`segment_objects`. Box any object it missed yourself.
 
 ### Histopathology (H&E images)
 - `check_image_quality(image_id)` first when the image will be analysed: report its warnings (blur,
