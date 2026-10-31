@@ -368,19 +368,28 @@ async def test_view_image_returns_the_picture_with_a_grid_and_annotations(api):
     assert "annotations_drawn" not in json.loads(plain.content[0].text)
 
 
-async def test_find_regions_numbers_the_regions_and_draws_them(api):
+async def _no_wait(_):
+    return None
+
+
+async def test_find_regions_numbers_the_regions_and_draws_them(api, monkeypatch):
     api.get(f"{API}/images/img-1").mock(return_value=ok({**IMAGE, "downloadUrl": "https://s3.test/cells.png"}))
     api.get("https://s3.test/cells.png").mock(return_value=httpx.Response(200, content=_png()))
     regions = [
         {"polygon": [[10, 10], [50, 10], [50, 40]], "score": 0.97, "area": 600, "bbox": [10, 10, 40, 30], "regions": 1},
         {"polygon": [[120, 50], [160, 50], [160, 90]], "score": 0.91, "area": 800, "bbox": [120, 50, 40, 40], "regions": 1},
     ]
-    seg = api.post(f"{API}/images/img-1/segment").mock(
-        return_value=ok({"imageId": "img-1", "width": 200, "height": 100, "model": "sam", "regions": regions})
-    )
+    seg = api.post(f"{API}/images/img-1/segment").mock(side_effect=[
+        httpx.Response(202, json={"success": True, "data": {"imageId": "img-1", "job": "a" * 32, "status": "running"}}),
+        httpx.Response(202, json={"success": True, "data": {"imageId": "img-1", "job": "a" * 32, "status": "running"}}),
+        ok({"imageId": "img-1", "status": "done", "width": 200, "height": 100, "model": "sam", "regions": regions}),
+    ])
+    import label_image_mcp.client as client_module
+    monkeypatch.setattr(client_module.asyncio, "sleep", _no_wait)
     result = await call_raw("find_regions", {"image_id": "img-1"})
     assert not result.isError, result.content
-    assert json.loads(seg.calls.last.request.content) == {"model": "sam", "auto": True}
+    sent = [json.loads(c.request.content) for c in seg.calls]
+    assert sent == [{"model": "sam", "auto": True}] + [{"model": "sam", "auto": True, "job": "a" * 32}] * 2
     info, picture = result.content
     data = json.loads(info.text)
     assert picture.type == "image" and picture.mimeType == "image/jpeg"

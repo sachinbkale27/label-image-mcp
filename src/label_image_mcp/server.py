@@ -425,8 +425,8 @@ async def find_regions(
     or when boxes are hard to place: look at the picture, choose the numbers that are the objects asked
     for, and pass their boxes unchanged to segment_objects (with model "medsam" for medical images). A
     region inside another is a part of it (e.g. a gland's lumen inside the gland): choose the one that
-    matches the whole object. Objects not found as a region still need a box of your own. Takes up to
-    about 20 seconds; covers the image coarse to fine, so very small objects can be missed.
+    matches the whole object. Objects not found as a region still need a box of your own. Takes about a
+    minute (a few after a quiet spell, while the model loads); very small objects can be missed.
     """
     client = _client(ctx)
     found = await client.find_regions(image_id)

@@ -201,17 +201,29 @@ class LabelImageClient:
                 await asyncio.sleep(retry_delay)
         raise AssertionError("unreachable")
 
-    async def find_regions(self, image_id: str, *, attempts: int = 6, retry_delay: float = 15.0) -> dict[str, Any]:
-        """Objects Segment Anything finds by itself ("segment everything"), as outlined regions. Retried
-        like segment while the model starts."""
+    async def find_regions(
+        self, image_id: str, *, attempts: int = 6, retry_delay: float = 15.0, poll: float = 5.0, wait: float = 240.0
+    ) -> dict[str, Any]:
+        """Objects Segment Anything finds by itself ("segment everything"), as outlined regions. It runs as a
+        background job (longer than the API waits): started, then polled until the regions are saved."""
+        path = f"/images/{image_id}/segment"
         for attempt in range(attempts):
             try:
-                return await self._request("POST", f"/images/{image_id}/segment", json={"model": "sam", "auto": True})
+                started = await self._request("POST", path, json={"model": "sam", "auto": True})
+                break
             except ApiError as exc:
                 if exc.status not in (503, 504) or attempt == attempts - 1:
                     raise
                 await asyncio.sleep(retry_delay)
-        raise AssertionError("unreachable")
+        if "regions" in started:  # an API that answers at once
+            return started
+        deadline = asyncio.get_running_loop().time() + wait  # a cold start loads the model first
+        while asyncio.get_running_loop().time() < deadline:
+            await asyncio.sleep(poll)
+            found = await self._request("POST", path, json={"model": "sam", "auto": True, "job": started["job"]})
+            if found.get("status") != "running":
+                return found
+        raise ApiError(f"Finding regions in image {image_id} took longer than {int(wait)} seconds", 504)
 
     async def pathology(
         self, image_id: str, action: str, *, attempts: int = 8, retry_delay: float = 15.0, **params: Any
