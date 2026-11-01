@@ -242,6 +242,18 @@ async def test_segment_objects_without_saving(api):
     assert result["outlines"][0]["label"] == "cell" and len(result["outlines"][0]["points"]) == 4
 
 
+async def test_a_box_and_a_point_go_together(api):
+    seg = api.post(f"{API}/images/img-1/segment").mock(return_value=ok({**SEGMENTED, "results": SEGMENTED["results"][:1]}))
+    api.put(f"{API}/images/img-1/annotations").mock(return_value=ok({"imageId": "img-1", "annotationCount": 4}))
+    await call("segment_objects", {
+        "image_id": "img-1",
+        "objects": [{"label": "band", "box": {"x": 5, "y": 5, "width": 60, "height": 40}, "point": {"x": 30, "y": 20}}],
+    })
+    assert json.loads(seg.calls.last.request.content)["prompts"] == [{"box": [5, 5, 65, 45], "point": [30, 20]}]
+    empty = await call_raw("segment_objects", {"image_id": "img-1", "objects": [{"label": "x"}]})
+    assert empty.isError and "a box, a point, or both" in empty.content[0].text
+
+
 async def test_medsam_needs_boxes(api):
     result = await call_raw("segment_objects", {
         "image_id": "img-1", "model": "medsam", "objects": [{"label": "lesion", "point": {"x": 5, "y": 5}}],

@@ -333,25 +333,32 @@ class Box(BaseModel):
 
 
 class SegmentTarget(BaseModel):
-    """One object to outline: a rough box around it (best), or a point on it."""
+    """One object to outline: a rough box around it, a point on it, or both (most precise)."""
 
     label: str
     box: Box | None = Field(None, description="Rough box around the object, in image pixels; a loose box is fine")
-    point: Point | None = Field(None, description="A point on the object, when a box is hard to give")
+    point: Point | None = Field(
+        None,
+        description="A point on the object. With a box, it says which thing in the box is meant: use both for "
+        "bands, structures between others, or objects at the image's edge (not with MedSAM).",
+    )
     color: str = DEFAULT_COLOR
     notes: str | None = None
 
     @model_validator(mode="after")
     def _one_prompt(self) -> SegmentTarget:
-        if (self.box is None) == (self.point is None):
-            raise ValueError("give either a box or a point")
+        if self.box is None and self.point is None:
+            raise ValueError("give a box, a point, or both")
         return self
 
     def prompt(self) -> dict[str, list[float]]:
+        prompt: dict[str, list[float]] = {}
         if self.box:
             b = self.box
-            return {"box": [b.x, b.y, b.x + b.width, b.y + b.height]}
-        return {"point": [self.point.x, self.point.y]}  # type: ignore[union-attr]
+            prompt["box"] = [b.x, b.y, b.x + b.width, b.y + b.height]
+        if self.point:
+            prompt["point"] = [self.point.x, self.point.y]
+        return prompt
 
 
 def _confidence(score: float) -> Literal["high", "medium", "low"]:
@@ -362,7 +369,7 @@ def _confidence(score: float) -> Literal["high", "medium", "low"]:
 async def segment_objects(
     ctx: Context,
     image_id: ImageId,
-    objects: Annotated[list[SegmentTarget], Field(description="Objects to outline, each with a label and a rough box (x, y, width, height) or a point on it, in image pixels.")],
+    objects: Annotated[list[SegmentTarget], Field(description="Objects to outline, each with a label and a rough box (x, y, width, height), a point on it, or both, in image pixels.")],
     model: Annotated[Literal["sam", "medsam"], Field(description="'sam' for everyday images; 'medsam' for medical images (CT, MRI, X-ray, ultrasound, endoscopy, pathology), which needs a box for every object.")] = "sam",
     save: Annotated[bool, Field(description="Save the outlines as polygon annotations; false only returns them.")] = True,
 ) -> dict[str, Any]:
@@ -376,8 +383,8 @@ async def segment_objects(
     """
     if not 1 <= len(objects) <= 20:
         raise ValueError("Give 1 to 20 objects")
-    if model == "medsam" and any(o.box is None for o in objects):
-        raise ValueError("MedSAM needs a box for every object")
+    if model == "medsam" and any(o.box is None or o.point is not None for o in objects):
+        raise ValueError("MedSAM needs a box, and only a box, for every object")
     client = _client(ctx)
     traced = await client.segment(image_id, [o.prompt() for o in objects], model)
     new, failed, added = [], [], []
