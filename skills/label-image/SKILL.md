@@ -69,8 +69,11 @@ with `with_annotations: true` and fix outlines that landed on the wrong object.
 ### Trace outlines (preferred)
 Call `warm_up("sam")` (or `"medsam"`) as soon as you know you will segment.
 Use `segment_objects(image_id, objects)` when the server has it: give each object a `label` and a rough
-`box` (x, y, width, height; loose is fine, it only has to contain the object) or a `point` on it, and
-Segment Anything traces the exact edges and saves polygons. Use `model: "medsam"` for medical images
+`box` (x, y, width, height; loose is fine, it only has to contain the object), a `point` on it, or both, and
+Segment Anything traces the exact edges and saves polygons. Give a box and a point together for a band
+(e.g. the stratum corneum), a structure between others (e.g. a dermal papilla) or one at the image's edge:
+the point says which thing in the box is meant. Don't box thin, curved structures that wrap around others
+(e.g. rete ridges): mark them with labelled pins instead. Use `model: "medsam"` for medical images
 (CT, MRI, X-ray, ultrasound, endoscopy, pathology), with a box for every object. Check `failed` in the
 result, and report the scores: an outline can be precise but of the wrong object if the box was off.
 When an image has many similar objects (glands, crypts, cells, vessels), or boxes are hard to place, call

@@ -107,6 +107,10 @@ not used for any choice. A nucleus counts as found when its outline overlaps the
 - Reproduce: [benchmarks/nuinsseg.py](benchmarks/nuinsseg.py) runs the same method locally.
 - Cell types (`classify_cells`) are not benchmarked here yet: NuInsSeg has no cell-type labels. HoVer-Net's
   published results on PanNuke are the reference until then.
+- Outlining (`find_regions`, `segment_objects`, with an AI assistant choosing what to outline) is so far only
+  checked on a small private test set: 5 H&E images with 43 reference findings (glands, cell nests, cysts,
+  skin layers, pigment), of which 41 were found. That guides development; it is not a benchmark, and outline
+  edges are not yet measured against expert outlines.
 
 ## Your data
 
@@ -163,7 +167,7 @@ mkdir -p ~/.claude/skills && cp -r /tmp/label-image-mcp/skills/label-image ~/.cl
 | `upload_image(path, name?, category?, description?)` | Upload a local image file |
 | `upload_image_from_url(url, name?, category?, description?)` | Download an image from an https URL (up to 20 MB) and upload it |
 | `find_regions(image_id, max_size?)` | Find the objects in the image automatically (Segment Anything with no prompts): returns them numbered, with each one's exact box, and a picture with the numbered outlines. Choose the right ones and pass their boxes to `segment_objects`, instead of estimating boxes. Nothing is saved |
-| `segment_objects(image_id, objects, model?, save?)` | Trace exact outlines with Segment Anything from a rough box or a point per object, and save them as polygons. `model`: `sam` (photos) or `medsam` (CT, MRI, X-ray, ultrasound, endoscopy, pathology; boxes only) |
+| `segment_objects(image_id, objects, model?, save?)` | Trace exact outlines with Segment Anything from a rough box, a point, or both per object, and save them as polygons. A box and a point together say which thing in the box is meant (bands, structures between others, objects at the edge). `model`: `sam` (photos) or `medsam` (CT, MRI, X-ray, ultrasound, endoscopy, pathology; boxes only) |
 | `detect_nuclei(image_id, max_nuclei?, mark_enlarged?, replace_previous?, save?, microns_per_pixel?)` | Find and outline every nucleus in an H&E image with StarDist, automatically (no boxes). Returns count, density, median area and size variation; nuclei over 2.5x the median area are labelled `enlarged nucleus`. With `microns_per_pixel` (often 0.25 at 40x, 0.5 at 20x) also in µm² and nuclei per mm² |
 | `classify_cells(image_id, wait_seconds?)` | Types the nuclei `detect_nuclei` saved as **tumour, immune, connective tissue, dead or normal epithelial** cells (HoVer-Net trained on PanNuke, 19 tissues), relabelling each nucleus and returning counts, percentages and the immune-to-tumour ratio. Runs in the background, 30 to 90 s. Needs a 20x or 40x image (coarser ones are refused). **Research and education only** (CC BY-NC-SA 4.0 weights) |
 | `normalize_stain(image_id)` | Macenko stain normalization: a copy with standard H&E colours, saved as a new image |
@@ -202,6 +206,22 @@ There is deliberately no tool for deleting images.
 ([wanglab/medsam-vit-base](https://huggingface.co/wanglab/medsam-vit-base)) in a Lambda container
 (`backend/segment`). After a quiet spell the model takes a while to start; the client retries then.
 Results are for research and dataset building, not diagnosis.
+
+### How it outlines
+
+Vision models read coordinates poorly: asked for boxes around glands, they often land on the stroma
+beside them. So the server does the precise part and leaves the model the choosing:
+
+- `find_regions` runs Segment Anything with no prompts: a grid of points (coarse to fine, skipping flat
+  background) and overlapping boxes of four sizes, which find large structures such as cell nests and
+  lobules. Duplicates, unstable masks, cut-off pieces and the dark surround of a microscope's field are
+  dropped, and a lumen is grown into its whole gland when a larger box outlines it cleanly. The regions come
+  back numbered with exact boxes and a picture, so the model picks numbers instead of estimating
+  coordinates. It runs as a background job (the API answers at once and the client polls), so it isn't cut
+  short by the API's 30-second limit.
+- For a box, Segment Anything offers a part, the object and something larger; the server keeps the
+  confident outline that best fills the box (less what spills outside), so a box around a gland gives the
+  gland, not its lumen. With a point as well, the point settles which thing in the box is meant.
 
 The histopathology tools call `POST /images/{id}/pathology`, which runs
 [StarDist](https://github.com/stardist/stardist) (BSD-3; its pretrained `2D_versatile_he` model was trained

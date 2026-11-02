@@ -4,6 +4,25 @@ All notable changes to Histopathology Annotation MCP (`label-image-mcp`). Versio
 [semantic versioning](https://semver.org): until 1.0, a minor version (0.x.0) may change or remove tools,
 and the change is listed here under **Changed** or **Removed**.
 
+## 0.9.0 (2026-11-01)
+
+### Added
+- `find_regions(image_id)`: finds the distinct objects in an image with Segment Anything and no prompts, and
+  returns them numbered with exact boxes and a picture of the outlines, for the assistant to choose from
+  instead of estimating coordinates (vision models place boxes poorly). Points coarse to fine plus
+  overlapping boxes of four sizes find both small objects and large structures (cell nests, lobules);
+  lumens are grown into their whole glands, and the dark surround of a microscope's field is left out.
+  It runs as a background job on the server, which the client polls, so it is not cut short by the API's
+  30-second limit.
+- `segment_objects` takes a box and a point together for one object: the point says which thing in the box
+  is meant (bands such as the stratum corneum, structures between others, objects at the image's edge).
+
+### Changed
+- A box now gives the confident outline that best fills it, of the three Segment Anything offers, instead
+  of its single default (which was often a gland's lumen rather than the gland).
+- On the hosted server, the caller's IP address is passed on for usage counts only as a keyed hash; the
+  address itself is not kept.
+
 ## 0.8.1 (2026-10-26)
 
 ### Changed
